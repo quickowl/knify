@@ -1,0 +1,53 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Knify",
+  "description": "Knify is a canvas protocol and hub for durable, shareable, interactive agent outputs.",
+  "colors": {
+    "primary": "#2563EB",
+    "light": "#60A5FA",
+    "dark": "#1E3A8A"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Start",
+        "pages": [
+          "index",
+          "quickstart",
+          "architecture"
+        ]
+      },
+      {
+        "group": "Core concepts",
+        "pages": [
+          "concepts/canvas",
+          "concepts/hub-links-viewers",
+          "concepts/applets-widgets"
+        ]
+      },
+      {
+        "group": "Protocol",
+        "pages": [
+          "protocol/schema",
+          "protocol/live-events",
+          "protocol/exports-api"
+        ]
+      },
+      {
+        "group": "Product strategy",
+        "pages": [
+          "product/use-cases",
+          "product/roadmap",
+          "product/commercial-wedges"
+        ]
+      },
+      {
+        "group": "Examples",
+        "pages": [
+          "examples/pixel-audit-demo"
+        ]
+      }
+    ]
+  }
+}

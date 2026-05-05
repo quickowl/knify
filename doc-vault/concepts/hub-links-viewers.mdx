@@ -1,0 +1,54 @@
+---
+title: "Hub, links, and viewers"
+description: "Where canvases live, how they travel, and where they are consumed."
+---
+
+The Hub is the registry, storage layer, and event log for canvases. Links are scoped capabilities. Viewers render canvases for humans.
+
+## Hub
+
+The Hub owns:
+
+- Canvas registry
+- Version history
+- Patch and event streams
+- Permissioned links
+- Forking
+- API access
+
+The Hub is infrastructure. It lets agent output survive beyond a chat thread, shell session, or agent VM.
+
+## Links
+
+A Knify link is more than a URL. It is a permissioned capability.
+
+| Link type | Permission | Example use |
+| --- | --- | --- |
+| Public view link | View only | Share a client report |
+| Private view link | View with auth | Internal dashboard |
+| Live view link | View and subscribe | Agent run monitor |
+| Fork link | View and fork | Template distribution |
+| Agent update link | Patch/write only | Agent can update a canvas but not admin it |
+| Owner link | Full control | Creator/admin |
+| Embed link | Restricted rendering | Website or dashboard embed |
+| API link | Read exported data | Downstream integration |
+
+The safe model:
+
+```text
+Canvas ID != permission
+Link token = scoped capability
+Hub enforces permissions
+Canvas JSON contains no secrets
+```
+
+## Viewers
+
+Viewers render the same canvas contract across surfaces:
+
+- Web viewer
+- iPad/mobile viewer
+- Embedded viewer
+- Custom branded viewer
+
+Viewers can change without changing the agent runtime. Agents can change without replacing the UI, links, dashboards, reports, or API consumers.

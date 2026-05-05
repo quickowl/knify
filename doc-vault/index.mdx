@@ -1,0 +1,38 @@
+---
+title: "Knify"
+description: "A canvas protocol and hub for durable, shareable, interactive agent outputs."
+---
+
+Knify turns agent output into durable, shareable, interactive canvases.
+
+Instead of agents only replying with text, they emit structured canvases that can be viewed, linked, updated, forked, embedded, and consumed like APIs.
+
+```text
+Agent work -> structured artifact -> stable link -> reusable app/API surface
+```
+
+## The core idea
+
+Canvas is the missing separation layer between agents and applications.
+
+Agents can change. Viewers can change. Workflows can change. The canvas remains the stable artifact.
+
+## What Knify provides
+
+| Layer | Role |
+| --- | --- |
+| Knify Protocol | Defines the canvas schema, blocks, events, actions, provenance, and exports |
+| Knify Hub | Stores canvases, versions, event streams, permissions, forks, and API access |
+| Knify Viewers | Render canvases on web, iPad, mobile, embeds, and branded surfaces |
+| Agent Adapters | Let Cursor, OpenClaw, Claude Code, Python agents, and custom workflows emit canvases |
+| Widget Registry | Provides standard and custom blocks without breaking portability |
+
+## First wedge
+
+Start with interactive AI reports for agents.
+
+That wedge is concrete: agents produce reports with text, metrics, tables, charts, logs, tasks, images, and share links. Once users understand that value, expand into live canvases, exported APIs, applets, custom widgets, and self-hosting.
+
+## Practical recommendation
+
+Build the static report plus hosted link version first. Dogfood it with PixelFix audits or agent code-review reports. Add live updates, API exports, and applets after the core artifact is useful.

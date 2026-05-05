@@ -1,0 +1,87 @@
+---
+title: "Architecture"
+description: "How agents, SDKs, the hub, links, viewers, and APIs fit together."
+---
+
+The agent does not own the UI. The agent emits a canvas contract. Viewers render it. Hubs persist it. Links distribute it.
+
+```mermaid
+flowchart TD
+    A[Agent / Tool / Workflow] --> B[Knify SDK or CLI]
+    B --> C[Canvas JSON / Patch Event]
+
+    C --> D[Knify Hub]
+    D --> E[Canvas Registry]
+    D --> F[Version + Event Log]
+    D --> G[Permissioned Links]
+    D --> H[Canvas API]
+
+    G --> I[Web Viewer]
+    G --> J[iPad / Mobile Viewer]
+    G --> K[Embedded Viewer]
+    H --> L[Internal Systems / APIs]
+
+    M[Widget Registry] --> I
+    M --> J
+    M --> K
+
+    N[Custom Viewer / Theme] --> I
+    N --> J
+    N --> K
+```
+
+## System hierarchy
+
+```text
+Knify Protocol
+  Canvas Schema
+    Blocks
+    Data
+    Layout
+    Events
+    Actions
+    Provenance
+    Exports/API contract
+
+Knify Hub
+  Canvas registry
+  Version history
+  Patch/event stream
+  Link permissions
+  Forking
+  API access
+
+Knify Viewers
+  Web viewer
+  Embedded viewer
+  iPad/mobile app
+  Custom branded viewers
+```
+
+## Sequence
+
+```mermaid
+sequenceDiagram
+    participant Agent
+    participant SDK
+    participant Hub
+    participant Link
+    participant Viewer
+    participant APIConsumer
+
+    Agent->>SDK: create canvas object
+    SDK->>Hub: POST /canvases
+    Hub-->>SDK: canvas_id + links
+
+    SDK-->>Agent: view_link + update_token
+
+    Viewer->>Link: open knify.link/c/abc123
+    Link->>Hub: resolve link + permission
+    Hub-->>Viewer: canvas snapshot
+
+    Agent->>Hub: PATCH /canvases/canv_123
+    Hub-->>Viewer: live update event
+
+    APIConsumer->>Hub: GET /canvases/canv_123/exports/misfire_count
+    Hub-->>APIConsumer: 317
+```

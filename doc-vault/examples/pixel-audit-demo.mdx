@@ -1,0 +1,65 @@
+---
+title: "Pixel audit demo"
+description: "A concrete early demo for interactive AI reports."
+---
+
+A strong first demo is a PixelFix audit.
+
+```text
+PixelFix audit
+-> agent inspects pixel events
+-> agent outputs Knify canvas
+-> client opens share link
+-> downstream system reads exported issue list
+```
+
+## Canvas contents
+
+The report should include:
+
+- Summary
+- Issue severity
+- Charts
+- Event logs
+- Detected misfires
+- Consent problems
+- Recommended fixes
+- Rerun audit button
+- Share-with-client link
+- Exported issue list API
+
+## Why this wedge works
+
+It is concrete, commercial, and visually obvious.
+
+It shows Knify is not only a dashboard builder because the artifact is agent-native, patchable, linkable, forkable, API-exportable, and runtime-agnostic.
+
+## Example SDK call
+
+```ts
+import { Knify } from "@knify/client";
+
+const knify = new Knify({ token: process.env.KNIFY_TOKEN });
+
+await knify.canvases.create({
+  title: "Pixel Attribution Audit",
+  kind: "report",
+  blocks: [
+    {
+      id: "summary",
+      kind: "text.markdown",
+      props: {
+        markdown: "Found 317 misfires and 42 missing-consent events."
+      }
+    }
+  ],
+  exports: [
+    {
+      name: "misfire_count",
+      path: "/data/summary_metrics/misfires",
+      type: "number",
+      stable: true
+    }
+  ]
+});
+```

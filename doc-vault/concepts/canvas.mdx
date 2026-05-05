@@ -1,0 +1,50 @@
+---
+title: "Canvas"
+description: "The stable artifact an agent produces."
+---
+
+A canvas is a structured output object: text, charts, images, tables, logs, tasks, widgets, actions, data, and metadata.
+
+It is the thing the agent produced.
+
+## Requirements
+
+A useful canvas must be:
+
+| Requirement | Meaning |
+| --- | --- |
+| Renderable | It can be shown as UI |
+| Addressable | Parts can be referenced by stable IDs and paths |
+| Updatable | Parts can be patched during or after an agent run |
+| Consumable | Other systems can read stable exported values |
+| Auditable | Source, actor, version, and provenance survive |
+
+## Static canvas
+
+Static canvases are best for reports, audits, research summaries, client deliverables, and one-time agent results.
+
+```text
+Agent produces full canvas JSON
+-> Hub stores snapshot
+-> Link opens viewer
+```
+
+## Live canvas
+
+Live canvases are best for long-running agent runs, monitoring dashboards, workflow status, research dossiers, debugging sessions, and mini-apps.
+
+```text
+Agent creates initial canvas
+-> Agent sends patch events
+-> Hub stores event log
+-> Viewer updates live
+-> API consumers subscribe
+```
+
+## Blocks are for humans
+
+Blocks describe the human-facing surface: markdown, metrics, charts, tables, logs, and controls.
+
+## Exports are for machines
+
+Exports expose stable paths that other systems can consume. API consumers should not scrape visual blocks.

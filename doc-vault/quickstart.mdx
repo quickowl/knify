@@ -1,0 +1,58 @@
+---
+title: "Quickstart"
+description: "Create and preview the first Knify canvas documentation site with Mintlify."
+---
+
+This repository is set up as a Mintlify documentation site.
+
+## Preview locally
+
+From the repository root:
+
+```bash
+npm run dev
+```
+
+Mintlify previews the docs at `http://localhost:3000`.
+
+## Validate
+
+```bash
+npm run validate
+npm run broken-links
+```
+
+These commands use the Mintlify CLI through `npx`.
+
+## First product milestone
+
+The initial build should prove one promise:
+
+> Agents can produce beautiful, shareable, durable reports.
+
+Minimum scope:
+
+| Capability | Include in v0.1 |
+| --- | --- |
+| Canvas schema | Snapshot canvas JSON with blocks, layout, data, and exports |
+| Hosted hub | Store canvas snapshots and return stable links |
+| Web viewer | Render the standard block set |
+| Share links | Public and private view links |
+| SDK/CLI | Create a canvas from agent code or local JSON |
+| Basic permissions | Separate view and update capabilities |
+
+## Starter block set
+
+Support the smallest block set that makes reports feel real:
+
+- Markdown
+- Heading
+- Metric
+- Table
+- Line chart
+- Bar chart
+- Image
+- Code block
+- Task list
+- Timeline
+- Log panel

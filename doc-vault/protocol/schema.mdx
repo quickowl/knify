@@ -1,0 +1,95 @@
+---
+title: "Canvas schema"
+description: "The minimum useful shape for a Knify canvas."
+---
+
+The canvas schema should not be only a visual tree. It needs blocks for humans and exports for machines.
+
+## Minimum object shape
+
+```json
+{
+  "schema_version": "knify.canvas.v0.1",
+  "canvas_id": "canv_123",
+  "title": "Pixel Attribution Audit",
+  "kind": "report",
+  "status": "active",
+  "meta": {
+    "created_by": "agent:openclaw",
+    "created_at": "2026-05-05T12:00:00Z",
+    "updated_at": "2026-05-05T12:15:00Z",
+    "source": "pixelfix.dev"
+  },
+  "layout": {
+    "type": "grid",
+    "columns": 12
+  },
+  "data": {
+    "summary_metrics": {
+      "events_seen": 18422,
+      "misfires": 317,
+      "missing_consent": 42
+    },
+    "daily_misfires": [
+      { "date": "2026-05-01", "count": 44 },
+      { "date": "2026-05-02", "count": 59 }
+    ]
+  },
+  "blocks": [
+    {
+      "id": "summary",
+      "kind": "text.markdown",
+      "layout": { "x": 0, "y": 0, "w": 12, "h": 2 },
+      "props": {
+        "markdown": "The audit found several pixel drift issues."
+      }
+    },
+    {
+      "id": "main_metrics",
+      "kind": "metrics.grid",
+      "layout": { "x": 0, "y": 2, "w": 12, "h": 2 },
+      "data_ref": "summary_metrics"
+    },
+    {
+      "id": "misfire_chart",
+      "kind": "chart.line",
+      "layout": { "x": 0, "y": 4, "w": 8, "h": 4 },
+      "data_ref": "daily_misfires",
+      "props": {
+        "x": "date",
+        "y": "count"
+      }
+    }
+  ],
+  "exports": [
+    {
+      "name": "misfire_count",
+      "path": "/data/summary_metrics/misfires",
+      "type": "number",
+      "stable": true
+    },
+    {
+      "name": "daily_misfires",
+      "path": "/data/daily_misfires",
+      "type": "array",
+      "stable": true
+    }
+  ],
+  "actions": [
+    {
+      "id": "rerun_audit",
+      "label": "Rerun audit",
+      "kind": "agent.action",
+      "requires_permission": "update"
+    }
+  ]
+}
+```
+
+## Versioning rule
+
+Treat `schema_version` as a compatibility contract. Old viewers should fail gracefully and render fallback blocks where possible.
+
+## Stable IDs
+
+Every block that can be referenced, patched, exported, or linked should have a stable `id`.

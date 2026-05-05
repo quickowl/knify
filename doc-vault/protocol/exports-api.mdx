@@ -1,0 +1,45 @@
+---
+title: "Exports as API"
+description: "How canvases expose stable machine-consumable values."
+---
+
+Canvas exports make agent work machine-consumable.
+
+Agents often live in shells, filesystems, browser sessions, repos, tool environments, and chat threads. The canvas gives them a structured output surface.
+
+## Principle
+
+Blocks are for humans. Exports are for machines.
+
+API consumers should read named exports instead of scraping visual blocks.
+
+## Export declaration
+
+```json
+{
+  "name": "misfire_count",
+  "path": "/data/summary_metrics/misfires",
+  "type": "number",
+  "stable": true
+}
+```
+
+## API surface
+
+Potential endpoints:
+
+```text
+GET /canvases/:id
+GET /canvases/:id/blocks/:block_id
+GET /canvases/:id/exports/:name
+PATCH /canvases/:id
+SUBSCRIBE /canvases/:id/events
+POST /canvases/:id/fork
+```
+
+## Contract rules
+
+- Export names should be stable across versions.
+- Export paths should point into `data`, not visual-only props.
+- Breaking export changes require a schema or canvas contract version bump.
+- Permissions should allow API links to read exports without granting viewer or update rights.

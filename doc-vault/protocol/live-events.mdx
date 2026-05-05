@@ -1,0 +1,59 @@
+---
+title: "Live events"
+description: "Patch events and live canvas updates."
+---
+
+Live canvases use an initial snapshot plus patch events.
+
+```text
+Create canvas snapshot
+-> append patch events
+-> persist event log
+-> stream updates to viewers and API subscribers
+```
+
+## Patch event
+
+```json
+{
+  "canvas_id": "canv_123",
+  "event_id": "evt_456",
+  "actor": "agent:openclaw",
+  "type": "canvas.patch",
+  "patch": [
+    {
+      "op": "replace",
+      "path": "/blocks/0/props/markdown",
+      "value": "Audit completed. Found 317 misfires."
+    },
+    {
+      "op": "replace",
+      "path": "/data/summary_metrics/misfires",
+      "value": 317
+    }
+  ]
+}
+```
+
+## Event log
+
+The Hub stores the event log so a live canvas is replayable and auditable.
+
+Event records should include:
+
+- Canvas ID
+- Event ID
+- Actor
+- Event type
+- Patch payload
+- Created timestamp
+- Permission scope used
+
+## Live modes
+
+| Mode | Use |
+| --- | --- |
+| Snapshot only | Static reports and deliverables |
+| Snapshot plus events | Live agent jobs and dashboards |
+| Event replay | Debugging, audit history, and version reconstruction |
+| Subscription | Viewer and API consumers receive updates |

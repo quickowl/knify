@@ -1,0 +1,12 @@
+{
+  "name": "knify-canvases-docs",
+  "private": true,
+  "engines": {
+    "node": ">=20.17.0"
+  },
+  "scripts": {
+    "dev": "npx mint dev --no-open",
+    "validate": "npx mint validate",
+    "broken-links": "npx mint broken-links"
+  }
+}

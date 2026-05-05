@@ -1,0 +1,55 @@
+---
+title: "Applets and widgets"
+description: "How canvases become small agentic applications."
+---
+
+A canvas becomes an applet when it has state, widgets, live patches, actions, permissions, and optional agent execution.
+
+## Applet examples
+
+| Applet | What it does |
+| --- | --- |
+| SEO audit applet | Audits a page, renders a report, and lets users rerun sections |
+| Pixel debugging applet | Shows events, broken pixels, drift, and consent issues |
+| Code review applet | Shows findings, files, diffs, severity, and actions |
+| Sales research applet | Shows lead profiles, enrichment, notes, and next actions |
+| Research dossier applet | Updates findings over time |
+| Monitoring applet | Displays live status from an agent or event stream |
+
+## Actions
+
+Actions turn a canvas from a passive artifact into a workflow surface.
+
+Examples:
+
+- Rerun audit
+- Approve recommendation
+- Generate next version
+- Ask agent to expand a section
+- Create Linear issue
+- Send Slack summary
+
+## Widget registry
+
+Knify should support:
+
+- Standard protocol
+- Standard renderer
+- Default widgets
+- Custom widgets
+- Custom themes
+- Custom branded viewers
+
+Custom widgets must not destroy portability. Use namespaced kinds and fallbacks.
+
+```json
+{
+  "id": "custom_heatmap",
+  "kind": "x.company.pixel_heatmap",
+  "fallback_kind": "table",
+  "data_ref": "pixel_events",
+  "props": {
+    "domain": "example.com"
+  }
+}
+```
