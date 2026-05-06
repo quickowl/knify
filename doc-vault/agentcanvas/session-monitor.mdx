@@ -23,3 +23,29 @@ make session-monitor-status
 ```
 
 For detailed flags and environment variables, see `../../apps/session-monitor/README.md`.
+
+## Skill deployment
+
+The session monitor skill is packaged separately under `skills/session-monitor` for `npx skills` users. Validate the package before installing it:
+
+```sh
+make skill-session-monitor-validate
+```
+
+Install for one agent:
+
+```sh
+make skill-session-monitor-install SKILL_AGENT=codex
+```
+
+Deploy globally for every agent supported by the local `npx skills` CLI:
+
+```sh
+make skill-session-monitor-deploy
+```
+
+After this repository is pushed, the same skill can be installed from GitHub with:
+
+```sh
+npx skills add quickowl/knify -g --skill session-monitor --agent codex -y
+```

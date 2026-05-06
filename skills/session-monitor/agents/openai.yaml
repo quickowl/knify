@@ -1,0 +1,4 @@
+interface:
+  display_name: "Session Monitor"
+  short_description: "Run Knify's AgentCanvas-compatible local session monitor for Codex and Claude Code review canvases."
+  default_prompt: "Use the session monitor to dry-run local session discovery, publish or watch an AgentCanvas-compatible review canvas, and report health without mutating provider state."
