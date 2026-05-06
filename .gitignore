@@ -1,1 +1,12 @@
 diff/
+.build/
+.cache/
+reports/
+*.log
+*.tmp
+*.out
+__pycache__/
+*.pyc
+apps/session-monitor/session-monitor
+session-monitor-live-watch.json
+session-monitor-result.json

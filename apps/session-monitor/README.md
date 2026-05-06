@@ -8,7 +8,7 @@ The daemon reads provider state only. It never writes to `~/.codex`, `~/.claude`
 
 ```sh
 go test ./...
-go build -o ../../.build/session-monitor/session-monitor .
+go build -o session-monitor .
 ```
 
 From the repo root:

@@ -27,6 +27,12 @@
         ]
       },
       {
+        "group": "AgentCanvas",
+        "pages": [
+          "agentcanvas/session-monitor"
+        ]
+      },
+      {
         "group": "Protocol",
         "pages": [
           "protocol/schema",

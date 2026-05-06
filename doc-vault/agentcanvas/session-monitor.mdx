@@ -1,0 +1,25 @@
+---
+title: "Session monitor"
+description: "Local daemon for turning agent session state into an AgentCanvas review canvas."
+---
+
+The session monitor scans local Codex and Claude Code session stores, records Cursor CLI health, and publishes one review canvas to an AgentCanvas-compatible hub.
+
+The imported implementation lives in `apps/session-monitor`. Its runtime contract stays intentionally narrow for now:
+
+- read local provider session stores without mutating them
+- fetch hub state from `/v1/canvases` and `/v1/agent-runs`
+- publish static canvases to `POST /v1/canvases`
+- optionally publish live updates through `/v1/canvases/{canvasId}/events`
+
+CanvasHub is still treated as an external API dependency here. The Go hub, web viewer, Slack app, iOS app, deploy scripts, and scenario suites were not imported.
+
+## Commands
+
+```sh
+make session-monitor-test
+make session-monitor-build
+make session-monitor-status
+```
+
+For detailed flags and environment variables, see `../../apps/session-monitor/README.md`.
