@@ -1,0 +1,42 @@
+---
+title: "Hub"
+description: "TypeScript Worker implementation of the AgentCanvas-compatible Knify hub."
+---
+
+The hub implementation lives in `apps/hub`. It is a TypeScript Cloudflare Worker that exposes the AgentCanvas v1 HTTP/SSE API used by the session monitor and viewers.
+
+The imported boundary is intentionally limited to the hub:
+
+- Worker fetch and queue handlers
+- D1 record store and R2 asset store
+- Durable Object SSE event hub
+- canvas, event, snapshot, edit, import/export, feedback, asset, agent-run, and viewer-link endpoints
+- Vitest coverage for the in-memory app path
+
+The old web viewer, iOS app, Slack app, scenario suites, generated caches, and seeded `.data` records were not imported.
+
+## Commands
+
+```sh
+make hub-install
+make hub-typecheck
+make hub-test
+make hub-build
+```
+
+Run a local Worker hub:
+
+```sh
+HUB_TOKEN=agentcanvas-dev-token make hub-start-local
+```
+
+By default, the local hub listens on `127.0.0.1:8787` and persists Wrangler state under `apps/hub/.data-worker`.
+
+## Deployment
+
+The port does not commit a Cloudflare `account_id` or custom route. Configure those outside source control or add a repo-specific deployment config before running:
+
+```sh
+cd apps/hub
+npm run deploy
+```

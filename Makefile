@@ -2,12 +2,13 @@ SHELL := /bin/bash
 
 SESSION_MONITOR_DIR ?= apps/session-monitor
 SESSION_MONITOR_BIN ?= $(SESSION_MONITOR_DIR)/session-monitor
+HUB_DIR ?= apps/hub
 SKILLS_CLI ?= npx --yes skills
 SKILLS_PACKAGE ?= $(CURDIR)
 SKILLS_SCOPE ?= -g
 SKILL_AGENT ?= codex
 
-.PHONY: session-monitor-test session-monitor-build session-monitor-status skill-session-monitor-validate skill-session-monitor-list skill-session-monitor-install skill-session-monitor-deploy
+.PHONY: session-monitor-test session-monitor-build session-monitor-status hub-install hub-typecheck hub-test hub-build hub-start-local skill-session-monitor-validate skill-session-monitor-list skill-session-monitor-install skill-session-monitor-deploy
 
 session-monitor-test:
 	cd "$(SESSION_MONITOR_DIR)" && go test ./...
@@ -17,6 +18,21 @@ session-monitor-build:
 
 session-monitor-status: session-monitor-build
 	"$(SESSION_MONITOR_BIN)" --status --recent "$${SESSION_MONITOR_RECENT:-12}" --out "$${SESSION_MONITOR_OUT:-/tmp/session-monitor-live-watch.json}" --hub-url "$${SESSION_MONITOR_HUB_URL:-http://127.0.0.1:8787}" --token "$${SESSION_MONITOR_HUB_TOKEN:-agentcanvas-dev-token}"
+
+hub-install:
+	cd "$(HUB_DIR)" && npm ci
+
+hub-typecheck:
+	cd "$(HUB_DIR)" && npm run typecheck
+
+hub-test:
+	cd "$(HUB_DIR)" && npm test
+
+hub-build:
+	cd "$(HUB_DIR)" && npm run build
+
+hub-start-local:
+	cd "$(HUB_DIR)" && npm run start-local
 
 skill-session-monitor-validate:
 	test -f skills/session-monitor/SKILL.md
