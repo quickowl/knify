@@ -1,55 +1,39 @@
 ---
 name: session-monitor
-description: Run and operate Knify's AgentCanvas-compatible local session monitor for Codex and Claude Code sessions, including dry-runs, hub publishes, live dynamic updates, and health checks.
+description: Operate Knify's daemon-based local session monitor for Codex and Claude Code JSONL session files.
 ---
 
 # Session Monitor
 
-Use this skill when the user wants to inspect local agent session state, publish a session review canvas, check monitor health, or wire Knify's session monitor to an AgentCanvas-compatible `/v1` hub.
+Use this skill only as a thin operator entry point for the daemon in `apps/session-monitor`.
 
-## Scope
+The monitor itself is intentionally almost skill-less:
+
+- it runs as a Go daemon
+- it checks provider session files on disk, usually JSONL
+- it watches by polling for new or changed sessions
+- it publishes canvas state to an AgentCanvas-compatible `/v1` hub
+- it does not need agent-side skill logic to parse, match, publish, or maintain state
+
+## Runtime Rules
 
 - Work from the Knify monorepo root when available.
-- Use `apps/session-monitor` as the daemon source.
-- Treat CanvasHub as an external compatible `/v1` API target.
-- Do not import or assume the old Go hub, iOS app, web app, Slack app, deploy scripts, or scenario suites.
-- The monitor reads local provider stores only. Do not write to `~/.codex`, `~/.claude`, or Cursor state.
+- Keep behavior in `apps/session-monitor`, not in this skill.
+- Treat CanvasHub as an external compatible API target.
+- Do not assume the old Go hub, iOS app, web app, Slack app, deploy scripts, or scenario suites are present.
+- The daemon reads local provider stores only. Do not write to `~/.codex`, `~/.claude`, or Cursor state.
 
-## Standard Workflow
+## Commands
 
-1. Verify the monitor builds and tests:
+```sh
+make session-monitor-test
+make session-monitor-build
+cd apps/session-monitor && go run . --once --dry-run --out /tmp/session-monitor-result.json
+cd apps/session-monitor && go run . --watch --dynamic --interval 1m --hub-url "$SESSION_MONITOR_HUB_URL" --token "$SESSION_MONITOR_HUB_TOKEN"
+make session-monitor-status
+```
 
-   ```sh
-   make session-monitor-test
-   make session-monitor-build
-   ```
-
-2. Run a read-only dry-run before publishing:
-
-   ```sh
-   cd apps/session-monitor
-   go run . --once --dry-run --out /tmp/session-monitor-result.json
-   ```
-
-3. Publish only when a hub URL and token are known:
-
-   ```sh
-   cd apps/session-monitor
-   go run . --once --hub-url "$SESSION_MONITOR_HUB_URL" --token "$SESSION_MONITOR_HUB_TOKEN"
-   ```
-
-4. For a live review canvas, use watch mode with dynamic events:
-
-   ```sh
-   cd apps/session-monitor
-   go run . --watch --dynamic --interval 1m --hub-url "$SESSION_MONITOR_HUB_URL" --token "$SESSION_MONITOR_HUB_TOKEN" --out /tmp/session-monitor-live-watch.json
-   ```
-
-5. Check daemon health:
-
-   ```sh
-   make session-monitor-status
-   ```
+For flags and environment variables, use `apps/session-monitor/README.md`.
 
 ## Deployment Through `npx skills`
 
@@ -62,5 +46,3 @@ make skill-session-monitor-deploy
 ```
 
 `skill-session-monitor-install` installs for one agent. `skill-session-monitor-deploy` installs globally for every agent supported by the local `npx skills` CLI.
-
-See `references/usage.md` for flags, environment variables, and common operating modes.

@@ -21,9 +21,9 @@ session-monitor-status: session-monitor-build
 skill-session-monitor-validate:
 	test -f skills/session-monitor/SKILL.md
 	test -f skills/session-monitor/agents/openai.yaml
-	test -f skills/session-monitor/references/usage.md
 	grep -q '^name: session-monitor$$' skills/session-monitor/SKILL.md
 	grep -Eq '^description: .+' skills/session-monitor/SKILL.md
+	grep -Eq '^  short_description: .+' skills/session-monitor/agents/openai.yaml
 	$(SKILLS_CLI) add "$(SKILLS_PACKAGE)" --skill "session-monitor" --list
 
 skill-session-monitor-list:

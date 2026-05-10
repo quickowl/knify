@@ -2,6 +2,8 @@
 
 `session-monitor` is a small Go daemon that scans local Codex and Claude Code session stores, matches recent sessions against AgentCanvas hub canvases/runs, and publishes one static review canvas to the hub. Cursor is included as a v1 health check only.
 
+Watch mode polls local disk state for new or changed provider session files, usually JSONL. Any `npx skills` package in this repo is only an operator shim around the daemon; it does not implement parsing, matching, publishing, or state management.
+
 The daemon reads provider state only. It never writes to `~/.codex`, `~/.claude`, or Cursor state.
 
 ## Build

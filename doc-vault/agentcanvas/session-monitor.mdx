@@ -3,16 +3,19 @@ title: "Session monitor"
 description: "Local daemon for turning agent session state into an AgentCanvas review canvas."
 ---
 
-The session monitor scans local Codex and Claude Code session stores, records Cursor CLI health, and publishes one review canvas to an AgentCanvas-compatible hub.
+The session monitor is a daemon, not a skill-driven workflow. It scans local Codex and Claude Code session files on disk, usually JSONL, records Cursor CLI health, and publishes one review canvas to an AgentCanvas-compatible hub.
 
 The imported implementation lives in `apps/session-monitor`. Its runtime contract stays intentionally narrow for now:
 
 - read local provider session stores without mutating them
+- detect new or changed sessions during watch mode by polling disk state
 - fetch hub state from `/v1/canvases` and `/v1/agent-runs`
 - publish static canvases to `POST /v1/canvases`
 - optionally publish live updates through `/v1/canvases/{canvasId}/events`
 
 CanvasHub is still treated as an external API dependency here. The Go hub, web viewer, Slack app, iOS app, deploy scripts, and scenario suites were not imported.
+
+The `skills/session-monitor` package is only an installable operator shim for `npx skills`; it does not contain monitor logic.
 
 ## Commands
 
