@@ -226,7 +226,7 @@ func dynamicEventID(canvasID, kind string, now time.Time, sequence int) string {
 
 func isSessionMonitorBlockID(id string) bool {
 	switch id {
-	case "session-monitor-heading", "session-monitor-overview", "session-monitor-recent-sessions", "session-monitor-session-list", "session-monitor-scan-metadata", "session-monitor-collection", "session-monitor-provider-health", "session-monitor-next-steps", "session-monitor-scan-warnings":
+	case "session-monitor-heading", "session-monitor-overview", "session-monitor-recent-sessions", "session-monitor-session-list", "session-monitor-scan-metadata", "session-monitor-collection", "session-monitor-daemon-build", "session-monitor-provider-health", "session-monitor-next-steps", "session-monitor-scan-warnings":
 		return true
 	default:
 		return strings.HasPrefix(id, "session-")

@@ -47,7 +47,9 @@ func mergeSessionRows(left, right types.LocalSession) types.LocalSession {
 		merged.Status = right.Status
 	}
 	merged.ResumeHint = core.FirstNonEmpty(merged.ResumeHint, right.ResumeHint)
+	merged.Artifacts = mergeArtifacts(merged.Artifacts, right.Artifacts)
 	merged.Metadata = mergeStringMaps(merged.Metadata, right.Metadata)
+	merged.Plan = mergeSessionPlan(merged.Plan, right.Plan)
 	merged = normalizeCollapseMetadata(
 		merged,
 		intMetadata(left.Metadata, "sourceFiles")+intMetadata(right.Metadata, "sourceFiles"),

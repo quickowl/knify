@@ -14,6 +14,9 @@ const (
 	SessionMonitorTitle = "Local session monitor"
 	DefaultStatusPath   = "/tmp/session-monitor-live-watch.json"
 	DefaultStaleAfter   = 3 * time.Minute
+	MaxSessionArtifacts = 5
+	TextArtifactCap     = 16 * 1024
+	ImageArtifactCap    = 20 * 1024 * 1024
 )
 
 type Config struct {
@@ -24,10 +27,12 @@ type Config struct {
 	CodexHome   string
 	ClaudeHome  string
 	OutPath     string
+	Build       DaemonBuildInfo
 	DryRun      bool
 	Dynamic     bool
 	Watch       bool
 	Status      bool
+	Pretty      bool
 	Interval    time.Duration
 	StaleAfter  time.Duration
 	RecentLimit int
@@ -54,15 +59,28 @@ type ScanResult struct {
 }
 
 type ProcessInfo struct {
-	PID      int    `json:"pid,omitempty"`
-	Mode     string `json:"mode,omitempty"`
-	Watch    bool   `json:"watch"`
-	Dynamic  bool   `json:"dynamic"`
-	Interval string `json:"interval,omitempty"`
-	HubURL   string `json:"hubUrl,omitempty"`
-	CanvasID string `json:"canvasId,omitempty"`
-	RunID    string `json:"runId,omitempty"`
-	OutPath  string `json:"outPath,omitempty"`
+	PID      int             `json:"pid,omitempty"`
+	Mode     string          `json:"mode,omitempty"`
+	Watch    bool            `json:"watch"`
+	Dynamic  bool            `json:"dynamic"`
+	Interval string          `json:"interval,omitempty"`
+	HubURL   string          `json:"hubUrl,omitempty"`
+	CanvasID string          `json:"canvasId,omitempty"`
+	RunID    string          `json:"runId,omitempty"`
+	OutPath  string          `json:"outPath,omitempty"`
+	Build    DaemonBuildInfo `json:"build,omitempty"`
+}
+
+type DaemonBuildInfo struct {
+	Version          string `json:"version,omitempty"`
+	Revision         string `json:"revision,omitempty"`
+	RevisionShort    string `json:"revisionShort,omitempty"`
+	CommitTime       string `json:"commitTime,omitempty"`
+	Modified         bool   `json:"modified,omitempty"`
+	GoVersion        string `json:"goVersion,omitempty"`
+	BinaryPath       string `json:"binaryPath,omitempty"`
+	BinaryModifiedAt string `json:"binaryModifiedAt,omitempty"`
+	BinarySize       int64  `json:"binarySize,omitempty"`
 }
 
 type OpenAIDocsEvidence struct {
@@ -94,15 +112,47 @@ type LocalSession struct {
 	UpdatedAt      string            `json:"updatedAt,omitempty"`
 	LatestMessages []MessageSummary  `json:"latestMessages,omitempty"`
 	ResumeHint     string            `json:"resumeHint,omitempty"`
+	ArtifactCount  int               `json:"artifactCount"`
+	Artifacts      []SessionArtifact `json:"artifacts,omitempty"`
 	Metadata       map[string]string `json:"metadata,omitempty"`
+	Plan           SessionPlan       `json:"plan,omitempty"`
 	Review         SessionReview     `json:"review,omitempty"`
 	Match          MatchResult       `json:"match"`
+}
+
+type SessionArtifact struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	Title       string `json:"title"`
+	Source      string `json:"source"`
+	Path        string `json:"path,omitempty"`
+	URL         string `json:"url,omitempty"`
+	AssetID     string `json:"assetId,omitempty"`
+	ContentType string `json:"contentType,omitempty"`
+	Size        int64  `json:"size,omitempty"`
+	Summary     string `json:"summary,omitempty"`
 }
 
 type MessageSummary struct {
 	Role      string `json:"role"`
 	Text      string `json:"text"`
 	Timestamp string `json:"timestamp,omitempty"`
+}
+
+type SessionPlan struct {
+	Key       string     `json:"key,omitempty"`
+	Title     string     `json:"title,omitempty"`
+	Source    string     `json:"source,omitempty"`
+	FilePath  string     `json:"filePath,omitempty"`
+	Status    string     `json:"status,omitempty"`
+	UpdatedAt string     `json:"updatedAt,omitempty"`
+	Summary   string     `json:"summary,omitempty"`
+	Items     []PlanItem `json:"items,omitempty"`
+}
+
+type PlanItem struct {
+	Text   string `json:"text"`
+	Status string `json:"status,omitempty"`
 }
 
 type MatchResult struct {
@@ -117,10 +167,12 @@ type MatchResult struct {
 }
 
 type SessionReview struct {
-	Purpose      string   `json:"purpose,omitempty"`
-	CurrentState string   `json:"currentState,omitempty"`
-	NextStep     string   `json:"nextStep,omitempty"`
-	Signals      []string `json:"signals,omitempty"`
+	Purpose        string   `json:"purpose,omitempty"`
+	CurrentState   string   `json:"currentState,omitempty"`
+	NextStep       string   `json:"nextStep,omitempty"`
+	EvidenceStatus string   `json:"evidenceStatus,omitempty"`
+	NudgePrompt    string   `json:"nudgePrompt,omitempty"`
+	Signals        []string `json:"signals,omitempty"`
 }
 
 type HubState struct {

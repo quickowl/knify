@@ -1,6 +1,8 @@
 package core
 
 import (
+	"fmt"
+	"hash/fnv"
 	"path/filepath"
 	"strings"
 )
@@ -22,6 +24,12 @@ func SanitizeID(value string) string {
 		}
 	}
 	return strings.Trim(b.String(), "-")
+}
+
+func ShortHash(value string) string {
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(value))
+	return fmt.Sprintf("%012x", hash.Sum64())
 }
 
 func SamePath(a, b string) bool {

@@ -22,6 +22,7 @@ func parseConfig(args []string) (types.Config, bool, error) {
 		RunID:       core.EnvOrDefault("SESSION_MONITOR_RUN_ID", types.DefaultRunID),
 		CodexHome:   filepath.Join(home, ".codex"),
 		ClaudeHome:  filepath.Join(home, ".claude"),
+		Build:       daemonBuildInfo(),
 		Interval:    core.DurationEnv("SESSION_MONITOR_INTERVAL", time.Minute),
 		StaleAfter:  core.DurationEnv("SESSION_MONITOR_STALE_AFTER", types.DefaultStaleAfter),
 		Lookback:    core.LookbackEnv(),
@@ -33,6 +34,7 @@ func parseConfig(args []string) (types.Config, bool, error) {
 	flags.SetOutput(io.Discard)
 	once := flags.Bool("once", false, "scan once and exit")
 	flags.BoolVar(&cfg.Status, "status", false, "read the last --out heartbeat and report daemon health")
+	flags.BoolVar(&cfg.Pretty, "pretty", false, "with --status, print a compact terminal dashboard")
 	flags.BoolVar(&cfg.Watch, "watch", false, "scan repeatedly")
 	flags.DurationVar(&cfg.Interval, "interval", cfg.Interval, "watch interval")
 	flags.DurationVar(&cfg.StaleAfter, "stale-after", cfg.StaleAfter, "maximum acceptable heartbeat age for --status")
@@ -64,5 +66,5 @@ func parseConfig(args []string) (types.Config, bool, error) {
 }
 
 func usage() string {
-	return "session-monitor --once|--watch|--status [--dry-run] [--dynamic] [--hub-url URL] [--out FILE]"
+	return "session-monitor --once|--watch|--status [--pretty] [--dry-run] [--dynamic] [--hub-url URL] [--out FILE]"
 }

@@ -2223,6 +2223,11 @@ p {
   color: var(--warn);
 }
 
+.parity-partial {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
 .canvas-message {
   margin: 0 22px 14px;
   padding: 10px 12px;
@@ -2236,6 +2241,40 @@ p {
 
 .canvas-message code {
   overflow-wrap: anywhere;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.canvas-update-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 22px 14px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.canvas-update-notice.update-dynamic {
+  border-color: var(--signal);
+  background: color-mix(in srgb, var(--signal-soft) 52%, var(--card));
+}
+
+.canvas-update-notice.update-static {
+  border-color: var(--amber);
+  background: color-mix(in srgb, var(--amber-soft) 52%, var(--card));
 }
 
 .canvas-content-grid {
@@ -2257,6 +2296,30 @@ p {
   border: 1px solid var(--line);
   border-radius: 4px;
   background: var(--card);
+}
+
+.hub-block.updated {
+  border-color: var(--signal);
+  animation: canvas-block-update-pulse 1800ms ease-out;
+}
+
+@keyframes canvas-block-update-pulse {
+  0% {
+    background: color-mix(in srgb, var(--signal-soft) 68%, var(--card));
+    box-shadow: inset 3px 0 0 var(--signal);
+  }
+  100% {
+    background: var(--card);
+    box-shadow: inset 0 0 0 transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hub-block.updated {
+    animation: none;
+    background: color-mix(in srgb, var(--signal-soft) 40%, var(--card));
+    box-shadow: inset 3px 0 0 var(--signal);
+  }
 }
 
 .hub-block.focused {
@@ -2531,6 +2594,51 @@ p {
   border-color: var(--signal);
   color: var(--ink);
   background: var(--card);
+}
+
+.collection-list button.read-running {
+  border-left: 3px solid var(--positive, #2faa64);
+}
+
+.collection-list button.read-unread {
+  border-left: 3px solid var(--signal);
+}
+
+.collection-list button.read-read {
+  border-left: 3px solid transparent;
+}
+
+.collection-list button.read-unread strong {
+  font-weight: 600;
+}
+
+.collection-list button.read-read strong {
+  color: var(--ink-soft);
+}
+
+.read-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  border: 1px solid var(--line);
+}
+
+.read-dot-running {
+  background: var(--positive, #2faa64);
+  border-color: var(--positive, #2faa64);
+  box-shadow: 0 0 0 2px rgba(47, 170, 100, 0.18);
+}
+
+.read-dot-unread {
+  background: var(--signal);
+  border-color: var(--signal);
+}
+
+.read-dot-read {
+  background: transparent;
 }
 
 .collection-list strong,

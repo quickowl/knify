@@ -12,6 +12,15 @@ import (
 	"github.com/quickowl/knify/apps/session-monitor/internal/types"
 )
 
+type AssetUploadResponse struct {
+	AssetID     string `json:"assetId"`
+	ID          string `json:"id"`
+	ContentType string `json:"contentType"`
+	Size        int64  `json:"size"`
+	URL         string `json:"url"`
+	CreatedAt   string `json:"createdAt"`
+}
+
 func FetchHubState(ctx context.Context, cfg types.Config) (types.HubState, error) {
 	var state types.HubState
 	var errs []string
@@ -124,4 +133,39 @@ func FetchHubCanvas(ctx context.Context, cfg types.Config, canvasID string) (typ
 		return types.Canvas{}, false, err
 	}
 	return canvas, true, nil
+}
+
+func UploadAsset(ctx context.Context, cfg types.Config, id, contentType string, body io.Reader) (AssetUploadResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, types.HubRequestTimeout)
+	defer cancel()
+	url := strings.TrimRight(cfg.HubURL, "/") + "/v1/assets/" + id
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
+	if err != nil {
+		return AssetUploadResponse{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", contentType)
+	if cfg.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return AssetUploadResponse{}, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return AssetUploadResponse{}, fmt.Errorf("POST /v1/assets/%s returned %d: %s", id, resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var response AssetUploadResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return AssetUploadResponse{}, err
+	}
+	if response.AssetID == "" {
+		response.AssetID = response.ID
+	}
+	if response.ID == "" {
+		response.ID = response.AssetID
+	}
+	return response, nil
 }

@@ -2,6 +2,8 @@ package canvas
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -26,10 +28,19 @@ func TestBuildCanvasCapsTranscriptText(t *testing.T) {
 		Match: types.MatchResult{Status: "unmatched", Reason: "no match"},
 	}
 	cfg := types.Config{
-		CanvasID:    types.DefaultCanvasID,
-		RunID:       types.DefaultRunID,
-		CodexHome:   "/tmp/codex",
-		ClaudeHome:  "/tmp/claude",
+		CanvasID:   types.DefaultCanvasID,
+		RunID:      types.DefaultRunID,
+		CodexHome:  "/tmp/codex",
+		ClaudeHome: "/tmp/claude",
+		Build: types.DaemonBuildInfo{
+			Version:          "v0.1.0",
+			RevisionShort:    "abc123def456",
+			Modified:         true,
+			GoVersion:        "go1.24.1",
+			BinaryPath:       "/tmp/session-monitor",
+			BinaryModifiedAt: "2026-04-29T11:59:00Z",
+			BinarySize:       12345,
+		},
 		Lookback:    time.Hour,
 		MaxSessions: 10,
 	}
@@ -46,6 +57,11 @@ func TestBuildCanvasCapsTranscriptText(t *testing.T) {
 	}
 	if !strings.Contains(string(raw), "Purpose: Long transcript") || !strings.Contains(string(raw), "match unmatched") || !strings.Contains(string(raw), "Next:") {
 		t.Fatalf("canvas missing recent session list metadata: %s", raw)
+	}
+	for _, want := range []string{"Daemon abc123def456+dirty", "Daemon build", "binaryModifiedAt", "2026-04-29T11:59:00Z"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("canvas missing daemon build field %q: %s", want, raw)
+		}
 	}
 }
 
@@ -68,7 +84,14 @@ func TestBuildCanvasRecentSessionsNewestFirst(t *testing.T) {
 		Status:         "idle",
 		UpdatedAt:      "2026-04-29T11:55:00Z",
 		LatestMessages: []types.MessageSummary{{Role: "assistant", Text: "newer message"}},
-		Match:          types.MatchResult{Status: "likely", CanvasID: "canvas-newer", RunID: "run-newer"},
+		Plan: types.SessionPlan{
+			Key:    "codex-proposed-plan:abc123",
+			Title:  "Review state plan",
+			Source: "codex-proposed-plan",
+			Status: "proposed",
+			Items:  []types.PlanItem{{Text: "Add plan metadata"}},
+		},
+		Match: types.MatchResult{Status: "likely", CanvasID: "canvas-newer", RunID: "run-newer"},
 	}
 	cfg := types.Config{
 		CanvasID:    types.DefaultCanvasID,
@@ -91,14 +114,81 @@ func TestBuildCanvasRecentSessionsNewestFirst(t *testing.T) {
 		t.Fatalf("recent session collection not newest-first: %#v", items)
 	}
 	subtitle := core.StringValue(items[0]["subtitle"])
-	for _, want := range []string{"Purpose: Newer session", "Now: idle, active; 5m ago; match likely; assistant: newer message", "Next: Confirm the likely canvas/run link"} {
+	for _, want := range []string{"Purpose: Newer session", "Plan: Review state plan (proposed)", "Now: idle, active; 5m ago; match likely; evidence pending (0); assistant: newer message", "Evidence: pending (0)", "Next: Confirm the likely canvas/run link"} {
 		if !strings.Contains(subtitle, want) {
 			t.Fatalf("recent session subtitle missing %q:\n%s", want, subtitle)
 		}
 	}
 	badges, ok := items[0]["badges"].([]string)
-	if !ok || strings.Join(badges, "|") != "claude|idle|active|likely" {
+	if !ok || strings.Join(badges, "|") != "claude|idle|active|likely|attention:idle|evidence:pending|plan" {
 		t.Fatalf("unexpected collection badges: %#v", items[0]["badges"])
+	}
+	raw, err := json.Marshal(canvas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "planTitle") || !strings.Contains(string(raw), "Review state plan") {
+		t.Fatalf("canvas metadata missing plan fields: %s", raw)
+	}
+}
+
+func TestBuildCanvasIncludesEvidenceBlocksAndManualNudge(t *testing.T) {
+	root := t.TempDir()
+	mdPath := filepath.Join(root, "review.md")
+	logPath := filepath.Join(root, "cli.log")
+	writeArtifactFile(t, mdPath, "# Review\n\nLooks good.\n")
+	writeArtifactFile(t, logPath, "go test ./...\nPASS\n")
+	ready := types.LocalSession{
+		Provider:  "codex",
+		SessionID: "ready-session",
+		Title:     "Ready evidence",
+		CWD:       root,
+		Status:    "recorded",
+		UpdatedAt: "2026-04-29T10:00:00Z",
+		Artifacts: []types.SessionArtifact{
+			{ID: "artifact-md", Kind: "markdown", Title: "review.md", Source: "assistant", Path: mdPath, ContentType: "text/markdown", Size: 20},
+			{ID: "artifact-log", Kind: "terminal", Title: "cli.log", Source: "assistant", Path: logPath, ContentType: "text/plain", Size: 20},
+			{ID: "artifact-img", Kind: "image", Title: "screen.png", Source: "assistant", AssetID: "asset.session-monitor.test", ContentType: "image/png", Summary: "uploaded"},
+		},
+		Match: types.MatchResult{Status: "unmatched"},
+	}
+	missing := types.LocalSession{
+		Provider:   "claude",
+		SessionID:  "missing-session",
+		Title:      "Missing evidence",
+		CWD:        root,
+		Status:     "idle",
+		UpdatedAt:  "2026-04-29T08:00:00Z",
+		ResumeHint: "claude -p --resume missing-session <prompt>",
+		Match:      types.MatchResult{Status: "unmatched"},
+	}
+	cfg := types.Config{
+		CanvasID:    types.DefaultCanvasID,
+		RunID:       types.DefaultRunID,
+		CodexHome:   "/tmp/codex",
+		ClaudeHome:  "/tmp/claude",
+		Lookback:    time.Hour,
+		MaxSessions: 10,
+	}
+	canvas := BuildCanvas(cfg, []types.LocalSession{ready, missing}, nil, nil, types.HubState{}, 1, time.Date(2026, 4, 29, 12, 0, 0, 0, time.UTC))
+	raw, err := json.Marshal(canvas)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"evidence:ready", "artifacts:3", "session-01-artifact-01", "Looks good.", "go test ./...", "asset.session-monitor.test", "Manual nudge", "claude -p --resume missing-session"} {
+		if !strings.Contains(string(raw), want) {
+			t.Fatalf("canvas missing %q:\n%s", want, raw)
+		}
+	}
+}
+
+func writeArtifactFile(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

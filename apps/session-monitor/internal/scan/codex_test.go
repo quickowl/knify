@@ -71,3 +71,26 @@ func TestParseCodexSessionHandlesLargeJSONLRecord(t *testing.T) {
 		t.Fatalf("message summary was not capped: %d", len(sessions[0].LatestMessages[0].Text))
 	}
 }
+
+func TestParseCodexSessionExtractsProposedPlan(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "codex")
+	sessionDir := filepath.Join(home, "sessions", "2026", "04", "29")
+	mustMkdir(t, sessionDir)
+	writeLines(t, filepath.Join(sessionDir, "rollout-2026-04-29T10-00-00-plan-session.jsonl"),
+		`{"timestamp":"2026-04-29T10:00:00Z","type":"session_meta","payload":{"id":"plan-session","cwd":"/tmp/demo"}}`,
+		`{"timestamp":"2026-04-29T10:00:01Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"<proposed_plan>\n# Session plan\n\n## Key Changes\n- Add scanner support\n- Show plan in dashboard\n\n## Test Plan\n- Run go test\n</proposed_plan>"}]}}`,
+	)
+
+	sessions, _, errs := scanCodex(testContext(t), home, time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC))
+	if len(errs) != 0 || len(sessions) != 1 {
+		t.Fatalf("unexpected scan result sessions=%#v errs=%#v", sessions, errs)
+	}
+	got := sessions[0].Plan
+	if got.Key == "" || got.Source != "codex-proposed-plan" || got.Title != "Session plan" || got.Status != "proposed" {
+		t.Fatalf("unexpected proposed plan: %#v", got)
+	}
+	if len(got.Items) < 2 || !strings.Contains(got.Items[0].Text, "Add scanner support") {
+		t.Fatalf("expected plan items, got %#v", got.Items)
+	}
+}

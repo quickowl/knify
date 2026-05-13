@@ -17,16 +17,20 @@ import (
 func TestRunOncePublishesCanvasToHub(t *testing.T) {
 	root := t.TempDir()
 	codexHome := filepath.Join(root, "codex")
+	cwd := filepath.Join(root, "work")
 	sessionDir := filepath.Join(codexHome, "sessions", "2026", "04", "29")
 	mustMkdir(t, sessionDir)
+	writeFile(t, filepath.Join(cwd, "screen.png"), "png")
 	writeLines(t, filepath.Join(sessionDir, "rollout-2026-04-29T10-00-00-thread-1.jsonl"),
-		`{"timestamp":"2026-04-29T10:00:00Z","type":"session_meta","payload":{"id":"thread-1","cwd":"/tmp/demo"}}`,
+		`{"timestamp":"2026-04-29T10:00:00Z","type":"session_meta","payload":{"id":"thread-1","cwd":"`+cwd+`"}}`,
 		`{"timestamp":"2026-04-29T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"text":"publish me"}]}}`,
+		`{"timestamp":"2026-04-29T10:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"text":"Published screenshot screen.png"}]}}`,
 	)
 	claudeHome := filepath.Join(root, "claude")
 	mustMkdir(t, filepath.Join(claudeHome, "projects"))
 
 	var posted types.Canvas
+	assetPosts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/canvases":
@@ -43,6 +47,12 @@ func TestRunOncePublishesCanvasToHub(t *testing.T) {
 			}
 		case "/v1/agent-runs":
 			_ = json.NewEncoder(w).Encode([]types.HubRun{})
+			return
+		}
+		if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/assets/") {
+			assetPosts++
+			id := strings.TrimPrefix(r.URL.Path, "/v1/assets/")
+			_ = json.NewEncoder(w).Encode(map[string]any{"assetId": id, "id": id, "contentType": r.Header.Get("Content-Type"), "url": "/v1/assets/" + id})
 			return
 		}
 		http.NotFound(w, r)
@@ -66,6 +76,13 @@ func TestRunOncePublishesCanvasToHub(t *testing.T) {
 	}
 	if !result.Posted || posted.ID != types.DefaultCanvasID || len(posted.Blocks) == 0 {
 		t.Fatalf("expected posted canvas, result=%#v posted=%#v", result, posted)
+	}
+	raw, err := json.Marshal(posted)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if assetPosts != 1 || !strings.Contains(string(raw), `"assetId"`) || !strings.Contains(string(raw), "evidence:ready") {
+		t.Fatalf("expected uploaded image evidence, assetPosts=%d canvas=%s", assetPosts, raw)
 	}
 }
 
@@ -159,6 +176,16 @@ func writeLines(t *testing.T, path string, lines ...string) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeFile(t *testing.T, path, contents string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }

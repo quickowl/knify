@@ -59,14 +59,20 @@ Check daemon health from the latest heartbeat:
 make session-monitor-status
 ```
 
+For a glanceable terminal dashboard that refreshes every few seconds:
+
+```sh
+make session-monitor-pulse
+```
+
 or directly:
 
 ```sh
 cd apps/session-monitor
-go run . --status --out /tmp/session-monitor-live-watch.json --hub-url http://127.0.0.1:8787 --token agentcanvas-dev-token
+go run . --status --pretty --out /tmp/session-monitor-live-watch.json --hub-url http://127.0.0.1:8787 --token agentcanvas-dev-token
 ```
 
-Use `--recent 20` with `--status` to print the newest tracked sessions with provider/status/match, workspace, title, and latest capped message. `--status` exits non-zero when the heartbeat is stale, Codex/Claude health is not `ok`, the last scan had errors, the daemon PID is dead, or the hub canvas cannot be fetched. With no `--out`, status reads `/tmp/session-monitor-live-watch.json`.
+Use `--recent 20` with `--status` to print the newest tracked sessions. Add `--pretty` for a compact terminal dashboard with heartbeat, daemon, hub, provider, match, and recent-session metrics. `--status` exits non-zero when the heartbeat is stale, Codex/Claude health is not `ok`, the last scan had errors, the daemon PID is dead, or the hub canvas cannot be fetched. With no `--out`, status reads `/tmp/session-monitor-live-watch.json`.
 
 ## Configuration
 
@@ -75,6 +81,7 @@ Flags:
 - `--once`: scan once and exit.
 - `--watch`: scan repeatedly.
 - `--status`: read the last heartbeat JSON and report whether the daemon and hub canvas look healthy.
+- `--pretty`: with `--status`, print a compact terminal dashboard.
 - `--recent`: with `--status`, print this many newest tracked sessions.
 - `--interval`: watch interval, such as `30s` or `1m`.
 - `--stale-after`: maximum heartbeat age accepted by `--status`; default `3m`.
@@ -126,17 +133,21 @@ The daemon fetches existing hub state with `GET /v1/canvases` and `GET /v1/agent
 - `likely`: compatible provider family, same workspace/cwd, and updates within the recent time window.
 - `unmatched`: no confident link.
 
-The published canvas starts with a native `Recent sessions (newest first)` collection in paged-list mode instead of a large markdown transcript. Each row is structured as `Purpose`, `Now`, and `Next`:
+The published canvas starts with a native `Recent sessions (newest first)` collection in paged-list mode instead of a large markdown transcript. Each row is structured as `Purpose`, optional `Plan`, `Now`, `Evidence`, and `Next`:
 
 - `Purpose`: the session title or inferred local task.
+- `Plan`: a provider-native plan when detected, including Claude plan files and Codex proposed/update plans. The stable plan key lets multiple sessions point at the same plan.
 - `Now`: provider status, activity age, match state, collapse count, and latest capped message.
+- `Evidence`: reviewable artifacts explicitly mentioned by assistant output, plans, or linked Hub canvases. Markdown files render as markdown blocks, log/text files as terminal blocks, and image files are uploaded to Hub assets before rendering.
 - `Next`: the recommended review action, such as keep watching, confirm a likely link, or decide whether an unmatched session should be linked or ignored.
 
 Static and dynamic/watch publishes use the same list-shaped collection so the web and iPad renderers avoid horizontal-only rails and markdown line-flattening.
 
 Scan warnings are summarized in the overview and moved into a collapsed metadata block so large parser paths do not dominate the review. The scanner accepts JSONL records up to 128 MiB; transcript-derived text is still capped before it is written to the canvas.
 
-The published canvas also contains provider health, scan errors, capped latest-message summaries, match metadata, and resume hints. It does not nudge or resume sessions in v1. Codex `exec`/`resume` and Claude `--resume` metadata are recorded for a later explicit action path; Codex `app-server` remains experimental and is not required by core sync.
+Evidence discovery is agent-owned: the daemon does not deep-scan workspaces for candidate files. It only reads files that were explicitly mentioned by assistant output or plans, with at most 5 artifacts per session, 16 KiB text previews, and 20 MiB image uploads. Sessions that appear ended without evidence get a manual nudge block with the provider resume hint and a prepared prompt.
+
+The published canvas also contains daemon build identity, provider health, scan errors, capped latest-message summaries, match metadata, and resume hints. Daemon build identity includes the VCS revision, dirty flag, Go version, and running binary path/timestamp so stale local binaries are visible in the review canvas. It does not auto-nudge or auto-resume sessions in v1. Codex `exec`/`resume` and Claude `--resume` metadata are recorded for a later explicit action path; Codex `app-server` remains experimental and is not required by core sync.
 
 ## Verification
 

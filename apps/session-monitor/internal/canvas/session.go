@@ -13,10 +13,24 @@ func sessionListSubtitle(session types.LocalSession, now time.Time) string {
 	review := Review(session, now)
 	parts := []string{
 		"Purpose: " + review.Purpose,
-		"Now: " + review.CurrentState,
-		"Next: " + review.NextStep,
 	}
+	if session.Plan.Key != "" {
+		parts = append(parts, "Plan: "+planLabel(session.Plan))
+	}
+	parts = append(parts, "Now: "+review.CurrentState, fmt.Sprintf("Evidence: %s (%d)", review.EvidenceStatus, len(session.Artifacts)), "Next: "+review.NextStep)
 	return strings.Join(parts, " - ")
+}
+
+func sessionAttention(session types.LocalSession, now time.Time) string {
+	updated := core.TimeFromRFC3339(session.UpdatedAt)
+	age := now.Sub(updated)
+	if !updated.IsZero() && age >= 0 && age <= 5*time.Minute && strings.EqualFold(session.Status, "busy") {
+		return "running"
+	}
+	if strings.EqualFold(session.Provider, "codex") && sessionActivityStatus(session, now) == "active" {
+		return "running"
+	}
+	return "idle"
 }
 
 func sessionActivityStatus(session types.LocalSession, now time.Time) string {
@@ -124,6 +138,38 @@ func providerHealthBlock(health []types.ProviderHealth) map[string]any {
 	}
 }
 
+func daemonBuildBlock(build types.DaemonBuildInfo) map[string]any {
+	return map[string]any{
+		"id":       "session-monitor-daemon-build",
+		"kind":     "metadata",
+		"title":    "Daemon build",
+		"metadata": daemonBuildMetadata(build),
+	}
+}
+
+func daemonBuildMetadata(build types.DaemonBuildInfo) map[string]any {
+	return map[string]any{
+		"build":            daemonBuildLabel(build),
+		"version":          build.Version,
+		"revision":         build.Revision,
+		"revisionShort":    build.RevisionShort,
+		"commitTime":       build.CommitTime,
+		"modified":         build.Modified,
+		"goVersion":        build.GoVersion,
+		"binaryPath":       build.BinaryPath,
+		"binaryModifiedAt": build.BinaryModifiedAt,
+		"binarySize":       build.BinarySize,
+	}
+}
+
+func daemonBuildLabel(build types.DaemonBuildInfo) string {
+	label := core.FirstNonEmpty(build.RevisionShort, build.Version, "dev")
+	if build.Modified && !strings.Contains(label, "dirty") {
+		label += "+dirty"
+	}
+	return label
+}
+
 func nextStepsBlock() map[string]any {
 	return map[string]any{
 		"id":    "session-monitor-next-steps",
@@ -144,6 +190,7 @@ func sessionMarkdown(session types.LocalSession, now time.Time) string {
 	fmt.Fprintf(&b, "### Review shape\n\n")
 	fmt.Fprintf(&b, "- Purpose: %s\n", review.Purpose)
 	fmt.Fprintf(&b, "- Now: %s\n", review.CurrentState)
+	fmt.Fprintf(&b, "- Evidence: %s (%d artifact%s)\n", review.EvidenceStatus, len(session.Artifacts), pluralS(len(session.Artifacts)))
 	fmt.Fprintf(&b, "- Next: %s\n", review.NextStep)
 	if len(review.Signals) > 0 {
 		fmt.Fprintf(&b, "- Signals: %s\n", strings.Join(review.Signals, "; "))
@@ -166,6 +213,40 @@ func sessionMarkdown(session types.LocalSession, now time.Time) string {
 	if session.ResumeHint != "" {
 		fmt.Fprintf(&b, "- Resume hint: `%s`\n", session.ResumeHint)
 	}
+	if session.Plan.Key != "" {
+		fmt.Fprintf(&b, "\n### Plan\n\n")
+		fmt.Fprintf(&b, "- Plan: %s\n", planLabel(session.Plan))
+		fmt.Fprintf(&b, "- Source: `%s`\n", core.FirstNonEmpty(session.Plan.Source, "unknown"))
+		if session.Plan.FilePath != "" {
+			fmt.Fprintf(&b, "- File: `%s`\n", session.Plan.FilePath)
+		}
+		if session.Plan.UpdatedAt != "" {
+			fmt.Fprintf(&b, "- Updated: %s\n", session.Plan.UpdatedAt)
+		}
+		if session.Plan.Summary != "" {
+			fmt.Fprintf(&b, "- Summary: %s\n", session.Plan.Summary)
+		}
+		for _, item := range session.Plan.Items {
+			prefix := "-"
+			if item.Status != "" {
+				prefix = fmt.Sprintf("- `%s`", item.Status)
+			}
+			fmt.Fprintf(&b, "%s %s\n", prefix, item.Text)
+		}
+	}
+	if outputs := outputsSection(session); outputs != "" {
+		fmt.Fprintf(&b, "\n### Outputs to check\n\n%s", outputs)
+	}
+	if len(session.Artifacts) > 0 {
+		fmt.Fprintf(&b, "\n### Review artifacts\n\n")
+		for _, artifact := range session.Artifacts {
+			fmt.Fprintf(&b, "- %s: %s", artifact.Kind, artifact.Title)
+			if artifact.Summary != "" {
+				fmt.Fprintf(&b, " - %s", artifact.Summary)
+			}
+			fmt.Fprintf(&b, "\n")
+		}
+	}
 	if len(session.LatestMessages) > 0 {
 		fmt.Fprintf(&b, "\n### Latest message summaries\n\n")
 		for _, message := range session.LatestMessages {
@@ -173,4 +254,72 @@ func sessionMarkdown(session types.LocalSession, now time.Time) string {
 		}
 	}
 	return core.Truncate(b.String(), sessionMarkdownCap)
+}
+
+func pluralS(count int) string {
+	if count == 1 {
+		return ""
+	}
+	return "s"
+}
+
+func planLabel(plan types.SessionPlan) string {
+	label := core.FirstNonEmpty(plan.Title, plan.Key, "untitled plan")
+	if plan.Status != "" {
+		return fmt.Sprintf("%s (%s)", label, plan.Status)
+	}
+	return label
+}
+
+func planItemsSummary(plan types.SessionPlan) string {
+	if len(plan.Items) == 0 {
+		return ""
+	}
+	items := make([]string, 0, len(plan.Items))
+	for _, item := range plan.Items {
+		if item.Status != "" {
+			items = append(items, item.Status+": "+item.Text)
+		} else {
+			items = append(items, item.Text)
+		}
+	}
+	return strings.Join(items, "; ")
+}
+
+func outputsSection(session types.LocalSession) string {
+	var b strings.Builder
+	var lastAssistant *types.MessageSummary
+	for i := len(session.LatestMessages) - 1; i >= 0; i-- {
+		message := session.LatestMessages[i]
+		if strings.EqualFold(message.Role, "assistant") && strings.TrimSpace(message.Text) != "" {
+			msg := message
+			lastAssistant = &msg
+			break
+		}
+	}
+	if lastAssistant != nil {
+		text := core.Truncate(strings.Join(strings.Fields(lastAssistant.Text), " "), 600)
+		fmt.Fprintf(&b, "- Last assistant turn: %s\n", text)
+	}
+	signals := []string{}
+	for _, message := range session.LatestMessages {
+		text := strings.ToLower(message.Text)
+		if strings.Contains(text, "error") || strings.Contains(text, "failed") || strings.Contains(text, "panic") {
+			snippet := core.Truncate(strings.Join(strings.Fields(message.Text), " "), 240)
+			signals = append(signals, fmt.Sprintf("- Possible error/warning (%s): %s\n", core.FirstNonEmpty(message.Role, "message"), snippet))
+			if len(signals) >= 3 {
+				break
+			}
+		}
+	}
+	for _, line := range signals {
+		b.WriteString(line)
+	}
+	if collapsed := session.Metadata["collapsedFiles"]; collapsed != "" {
+		fmt.Fprintf(&b, "- Collapsed local files: %s\n", collapsed)
+	}
+	if session.ResumeHint != "" {
+		fmt.Fprintf(&b, "- Resume hint: `%s`\n", session.ResumeHint)
+	}
+	return b.String()
 }

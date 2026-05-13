@@ -1,5 +1,4 @@
 export const defaultHubBaseURL = "https://hub.knify.dev";
-export const defaultHubToken = "agentcanvas-dev-token";
 
 export const dashboardFixtures = [
   { id: "pixel-audit-acme", ticket: "PIX-184", title: "Acme pixel drift", agentId: "pixelfix-agent", version: 3, live: true, kind: "metric", severity: "green", team: "design", summary: "Pixel audit tracking visual drift across launch surfaces." },
@@ -83,13 +82,29 @@ export function sameDashboardCanvas(actual, expected) {
     && actual.mode === expected.mode
     && actual.priority === expected.priority
     && actual.version === expected.version
-    && JSON.stringify(actualMeta) === JSON.stringify(expectedMeta);
+    && sameRecord(actualMeta, expectedMeta);
+}
+
+function sameRecord(actual, expected) {
+  const actualKeys = Object.keys(actual).sort();
+  const expectedKeys = Object.keys(expected).sort();
+  if (actualKeys.length !== expectedKeys.length) return false;
+  for (let index = 0; index < expectedKeys.length; index += 1) {
+    const key = expectedKeys[index];
+    if (actualKeys[index] !== key || actual[key] !== expected[key]) return false;
+  }
+  return true;
 }
 
 export function hubRequestConfig() {
+  const token = process.env.HUB_TOKEN || process.env.AGENTCANVAS_TOKEN || process.env.CANVAS_HUB_TOKEN || "";
+  if (!token) {
+    throw new Error("Set HUB_TOKEN before seeding or checking dashboard fixtures.");
+  }
+
   return {
     hubBaseURL: process.env.HUB_BASE_URL || defaultHubBaseURL,
-    token: process.env.HUB_TOKEN || defaultHubToken,
+    token,
   };
 }
 

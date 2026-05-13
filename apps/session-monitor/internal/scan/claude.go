@@ -49,6 +49,12 @@ func scanClaude(home string, cutoff time.Time) ([]types.LocalSession, types.Prov
 			errorsOut = append(errorsOut, fmt.Sprintf("claude stat %s: %v", path, statErr))
 			return nil
 		}
+		if info.ModTime().UTC().Before(cutoff) {
+			fileSessionID := strings.TrimSuffix(filepath.Base(path), ".jsonl")
+			if _, ok := active[fileSessionID]; !ok {
+				return nil
+			}
+		}
 		session, parseErr := parseClaudeProjectFile(path, info.ModTime().UTC(), active)
 		if parseErr != nil {
 			errorsOut = append(errorsOut, parseErr.Error())
@@ -138,10 +144,17 @@ func parseClaudeProjectFile(path string, modTime time.Time, active map[string]cl
 		}
 		recordType := core.StringValue(record["type"])
 		recordTime := core.ParseRecordTime(record)
+		if plan := extractClaudePlan(record, recordTime); plan.Key != "" {
+			session.Plan = mergeSessionPlan(session.Plan, plan)
+			session.Artifacts = mergeArtifacts(session.Artifacts, extractArtifactsFromText(plan.FilePath, session.CWD, "plan"))
+		}
 		created = core.Earliest(created, recordTime)
 		updated = core.Latest(updated, recordTime)
 		session.SessionID = core.FirstNonEmpty(session.SessionID, core.StringValue(record["sessionId"]))
 		session.CWD = core.FirstNonEmpty(session.CWD, core.StringValue(record["cwd"]))
+		if result := core.MapValue(record["toolUseResult"]); result != nil {
+			session.Artifacts = mergeArtifacts(session.Artifacts, extractArtifactsFromText(core.StringValue(result["plan"]), session.CWD, "plan"))
+		}
 		if branch := core.StringValue(record["gitBranch"]); branch != "" {
 			session.Metadata["gitBranch"] = branch
 		}
@@ -161,7 +174,11 @@ func parseClaudeProjectFile(path string, modTime time.Time, active map[string]cl
 		if recordType == "user" || recordType == "assistant" {
 			message := core.MapValue(record["message"])
 			role := core.FirstNonEmpty(core.StringValue(message["role"]), recordType)
-			text := core.SummarizeText(core.ExtractText(message["content"]), MessageTextLimit)
+			rawText := core.ExtractText(message["content"])
+			if strings.EqualFold(role, "assistant") {
+				session.Artifacts = mergeArtifacts(session.Artifacts, extractArtifactsFromText(rawText, session.CWD, "assistant"))
+			}
+			text := core.SummarizeText(rawText, MessageTextLimit)
 			if text != "" {
 				messages = append(messages, types.MessageSummary{Role: role, Text: text, Timestamp: core.FormatTime(recordTime)})
 			}

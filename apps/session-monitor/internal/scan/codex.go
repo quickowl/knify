@@ -188,9 +188,19 @@ func parseCodexSessionFile(path string, modTime time.Time, index map[string]code
 				session.SessionID = core.FirstNonEmpty(session.SessionID, threadID)
 			}
 		case "response_item":
+			if core.StringValue(payload["type"]) == "function_call" {
+				if strings.Contains(strings.ToLower(core.StringValue(payload["name"])), "update_plan") {
+					session.Plan = mergeSessionPlan(session.Plan, extractCodexPlanFromFunctionCall(payload, recordTime))
+				}
+			}
 			role := core.StringValue(payload["role"])
 			if role == "user" || role == "assistant" {
-				text := core.SummarizeText(core.ExtractText(payload["content"]), MessageTextLimit)
+				rawText := core.ExtractText(payload["content"])
+				if role == "assistant" {
+					session.Plan = mergeSessionPlan(session.Plan, extractCodexPlanFromMessage(rawText, recordTime))
+					session.Artifacts = mergeArtifacts(session.Artifacts, extractArtifactsFromText(rawText, session.CWD, "assistant"))
+				}
+				text := core.SummarizeText(rawText, MessageTextLimit)
 				if text != "" {
 					messages = append(messages, types.MessageSummary{Role: role, Text: text, Timestamp: core.FormatTime(recordTime)})
 				}

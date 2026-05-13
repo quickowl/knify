@@ -12,6 +12,7 @@ import (
 
 	"github.com/quickowl/knify/apps/session-monitor/internal/canvas"
 	"github.com/quickowl/knify/apps/session-monitor/internal/core"
+	"github.com/quickowl/knify/apps/session-monitor/internal/evidence"
 	"github.com/quickowl/knify/apps/session-monitor/internal/hub"
 	"github.com/quickowl/knify/apps/session-monitor/internal/match"
 	"github.com/quickowl/knify/apps/session-monitor/internal/scan"
@@ -75,9 +76,11 @@ func runOnce(ctx context.Context, cfg types.Config) (types.ScanResult, error) {
 	if len(sessions) > cfg.MaxSessions {
 		sessions = sessions[:cfg.MaxSessions]
 	}
+	evidenceWarnings := evidence.EnrichSessions(ctx, cfg, sessions)
 	canvas.FillSessionReviews(sessions, now)
 	version := match.NextCanvasVersion(cfg.CanvasID, hubState)
-	built := canvas.BuildCanvas(cfg, sessions, health, append(scanErrors, hubErrors...), hubState, version, now)
+	allErrors := append(append(scanErrors, hubErrors...), evidenceWarnings...)
+	built := canvas.BuildCanvas(cfg, sessions, health, allErrors, hubState, version, now)
 	if cfg.Dynamic {
 		built = canvas.CompactDynamicCanvas(built)
 	}
@@ -88,7 +91,7 @@ func runOnce(ctx context.Context, cfg types.Config) (types.ScanResult, error) {
 		MaxSessions:    cfg.MaxSessions,
 		Sessions:       sessions,
 		ProviderHealth: health,
-		Errors:         append(scanErrors, hubErrors...),
+		Errors:         allErrors,
 		Hub: types.HubSummary{
 			URL:         cfg.HubURL,
 			CanvasCount: len(hubState.Canvases),

@@ -34,6 +34,7 @@ export type CanvasStatus =
   | string;
 
 export type CanvasPriority = "low" | "normal" | "high" | "urgent" | string;
+export type CanvasMode = "static" | "dynamic";
 export type CanvasReviewState = "pending" | "approved" | "rejected" | "skipped";
 export type FeedbackDecision = "accepted" | "needs_changes" | "comment_only";
 
@@ -53,12 +54,14 @@ export interface AgentCanvas {
   agentName: string;
   runID: string;
   status: CanvasStatus;
+  mode?: CanvasMode;
   priority: CanvasPriority;
   reviewState: CanvasReviewState;
   createdAt: string;
   updatedAt: string;
   updatedAtMs: number;
   version: number;
+  lastEventId?: string;
   tags: string[];
   blocks: CanvasBlock[];
 }

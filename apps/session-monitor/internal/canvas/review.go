@@ -16,8 +16,16 @@ func FillSessionReviews(sessions []types.LocalSession, now time.Time) {
 }
 
 func Review(session types.LocalSession, now time.Time) types.SessionReview {
+	evidenceStatus := core.FirstNonEmpty(session.Review.EvidenceStatus, inferEvidenceStatus(session, now))
+	nudgePrompt := session.Review.NudgePrompt
+	if evidenceStatus == "missing" && nudgePrompt == "" {
+		nudgePrompt = manualNudgePrompt(session)
+	}
 	if session.Review.Purpose != "" && session.Review.CurrentState != "" && session.Review.NextStep != "" {
-		return session.Review
+		review := session.Review
+		review.EvidenceStatus = evidenceStatus
+		review.NudgePrompt = nudgePrompt
+		return review
 	}
 	purpose := inferSessionPurpose(session)
 	current := inferCurrentState(session, now)
@@ -25,6 +33,7 @@ func Review(session types.LocalSession, now time.Time) types.SessionReview {
 	signals := []string{
 		fmt.Sprintf("provider %s, status %s, activity %s (%s)", session.Provider, core.FirstNonEmpty(session.Status, "unknown"), sessionActivityStatus(session, now), sessionAgeLabel(session, now)),
 		fmt.Sprintf("match %s", core.FirstNonEmpty(session.Match.Status, "unmatched")),
+		fmt.Sprintf("evidence %s (%d artifacts)", evidenceStatus, len(session.Artifacts)),
 	}
 	if session.CWD != "" {
 		signals = append(signals, "workspace "+core.DisplayCWD(session.CWD))
@@ -39,10 +48,12 @@ func Review(session types.LocalSession, now time.Time) types.SessionReview {
 		signals = append(signals, "latest "+latest)
 	}
 	return types.SessionReview{
-		Purpose:      core.Truncate(purpose, 180),
-		CurrentState: core.Truncate(current, 220),
-		NextStep:     core.Truncate(next, 180),
-		Signals:      capStrings(signals, 5),
+		Purpose:        core.Truncate(purpose, 180),
+		CurrentState:   core.Truncate(current, 240),
+		NextStep:       core.Truncate(next, 180),
+		EvidenceStatus: evidenceStatus,
+		NudgePrompt:    nudgePrompt,
+		Signals:        capStrings(signals, 6),
 	}
 }
 
@@ -66,6 +77,7 @@ func inferCurrentState(session types.LocalSession, now time.Time) string {
 		fmt.Sprintf("%s, %s", core.FirstNonEmpty(session.Status, "unknown"), sessionActivityStatus(session, now)),
 		sessionAgeLabel(session, now),
 		fmt.Sprintf("match %s", core.FirstNonEmpty(session.Match.Status, "unmatched")),
+		fmt.Sprintf("evidence %s (%d)", inferEvidenceStatus(session, now), len(session.Artifacts)),
 	}
 	if collapsed := session.Metadata["collapsedFiles"]; collapsed != "" {
 		parts = append(parts, "collapsed "+collapsed+" files")
@@ -88,8 +100,32 @@ func inferNextStep(session types.LocalSession, now time.Time) string {
 	if activity == "active" || strings.EqualFold(session.Status, "busy") {
 		return "Keep watching; attach this session to a canvas if it needs reviewer attention."
 	}
+	if inferEvidenceStatus(session, now) == "missing" {
+		return "Send the manual nudge if this session needs reviewable evidence."
+	}
 	if collapsed := session.Metadata["collapsedFiles"]; collapsed != "" {
 		return "Review the parent row first; expand metadata only if the collapsed subagent files matter."
 	}
 	return "Decide whether this unmatched session should be linked, ignored, or used as resume context."
+}
+
+func inferEvidenceStatus(session types.LocalSession, now time.Time) string {
+	if len(session.Artifacts) > 0 {
+		return "ready"
+	}
+	activity := sessionActivityStatus(session, now)
+	if activity == "active" || strings.EqualFold(session.Status, "busy") || strings.EqualFold(session.Status, "running") {
+		return "pending"
+	}
+	return "missing"
+}
+
+func manualNudgePrompt(session types.LocalSession) string {
+	title := core.FirstNonEmpty(session.Title, session.SessionID, "this session")
+	return strings.Join([]string{
+		"Please produce reviewable evidence for this session before it is considered complete.",
+		"Session: " + title,
+		"Add or mention the relevant artifacts explicitly: screenshots for UI work, terminal logs for CLI/service work, charts for data work, or a concise conclusion if no external artifact applies.",
+		"Update the existing AgentCanvas review artifact or reply with the artifact paths and verification summary.",
+	}, "\n")
 }

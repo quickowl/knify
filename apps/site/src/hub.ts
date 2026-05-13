@@ -58,12 +58,14 @@ export function normalizeCanvas(raw: unknown): AgentCanvas {
     agentName: readString(record, "agentName") || agentID,
     runID,
     status,
+    mode: normalizeCanvasMode(readString(record, "mode")),
     priority,
     reviewState: normalizeReviewState(readString(record, "reviewState"), status),
     createdAt,
     updatedAt,
     updatedAtMs: Date.parse(updatedAt) || 0,
     version: readNumber(record, "version") || 1,
+    lastEventId: readString(record, "lastEventId", "lastEventID") || undefined,
     tags: readStringArray(record.tags),
     blocks: Array.isArray(record.blocks) ? record.blocks.map(normalizeBlock) : [],
   };
@@ -150,19 +152,32 @@ export async function createViewerLink(canvasID: string) {
   return hubJSON<{ url?: string; code?: string; id?: string }>("/viewer-links", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ kind: "share", scope: "canvas", canvasId: canvasID, capabilities: ["view", "feedback"] }),
+    body: JSON.stringify({ kind: "share", scope: "canvas", canvasId: canvasID, capabilities: ["canvas.read", "canvas.live", "asset.read", "feedback.submit"] }),
   });
 }
 
 export function openHubEventSource(onEvent: (event: HubEvent) => void) {
   const source = new EventSource("/api/hub/events");
-  source.addEventListener("message", (event) => {
+  const handle = (event: MessageEvent<string>) => {
     try {
       onEvent(JSON.parse(event.data) as HubEvent);
     } catch {
       // Ignore malformed keepalives from dev servers.
     }
-  });
+  };
+  source.addEventListener("message", handle);
+  [
+    "canvas.created",
+    "canvas.updated",
+    "canvas.restored",
+    "canvas.imported",
+    "canvas.event.created",
+    "canvas.snapshot.created",
+    "feedback.created",
+    "feedback.delivery.queued",
+    "feedback.delivery.retrying",
+    "feedback.delivered",
+  ].forEach((name) => source.addEventListener(name, handle));
   return source;
 }
 
@@ -200,6 +215,10 @@ function normalizeReviewState(value: string | undefined, status: string) {
   if (status === "accepted" || status === "completed" || status === "archived") return "approved";
   if (status === "failed") return "rejected";
   return "pending";
+}
+
+function normalizeCanvasMode(value: string | undefined) {
+  return value === "dynamic" || value === "static" ? value : undefined;
 }
 
 function readString(record: Record<string, unknown>, ...keys: string[]): string {

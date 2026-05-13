@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -90,5 +91,58 @@ func TestScanClaudeCollapsesSubagentFiles(t *testing.T) {
 	}
 	if health.Details["sessions"] != "1" || health.Details["rawFiles"] != "3" || health.Details["collapsedFiles"] != "2" {
 		t.Fatalf("unexpected health details: %#v", health.Details)
+	}
+}
+
+func TestScanClaudeSkipsOldProjectFilesBeforeParsing(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "claude")
+	projectDir := filepath.Join(home, "projects", "-tmp-demo")
+	mustMkdir(t, projectDir)
+	oldPath := filepath.Join(projectDir, "old-session.jsonl")
+	recentPath := filepath.Join(projectDir, "recent-session.jsonl")
+	writeLines(t, oldPath,
+		`{"type":"user","message":{"role":"user","content":"old but expensive"},"timestamp":"2026-04-29T11:00:00Z","cwd":"/tmp/demo","sessionId":"old-session"}`,
+	)
+	writeLines(t, recentPath,
+		`{"type":"user","message":{"role":"user","content":"recent"},"timestamp":"2026-04-30T11:00:00Z","cwd":"/tmp/demo","sessionId":"recent-session"}`,
+	)
+	oldModTime := time.Date(2026, 4, 28, 11, 0, 0, 0, time.UTC)
+	if err := os.Chtimes(oldPath, oldModTime, oldModTime); err != nil {
+		t.Fatal(err)
+	}
+
+	sessions, health, errs := scanClaude(home, time.Date(2026, 4, 29, 0, 0, 0, 0, time.UTC))
+	if len(errs) != 0 {
+		t.Fatalf("unexpected errors: %#v", errs)
+	}
+	if len(sessions) != 1 || sessions[0].SessionID != "recent-session" {
+		t.Fatalf("expected only recent session, got %#v", sessions)
+	}
+	if health.Details["sessions"] != "1" {
+		t.Fatalf("unexpected health details: %#v", health.Details)
+	}
+}
+
+func TestParseClaudeSessionExtractsNativePlan(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "claude")
+	projectDir := filepath.Join(home, "projects", "-tmp-demo")
+	mustMkdir(t, projectDir)
+	writeLines(t, filepath.Join(projectDir, "claude-session-plan.jsonl"),
+		`{"type":"user","message":{"role":"user","content":"review plan"},"timestamp":"2026-04-29T11:00:00Z","cwd":"/tmp/demo","sessionId":"claude-session-plan"}`,
+		`{"type":"assistant","message":{"role":"assistant","content":"ready"},"timestamp":"2026-04-29T11:00:03Z","cwd":"/tmp/demo","sessionId":"claude-session-plan","toolUseResult":{"plan":"# Claude implementation plan\n\n## Steps\n- Inspect scanner\n- Add plan metadata\n- Run tests\n","filePath":"/Users/fireharp/.claude/plans/shared-plan.md","planWasEdited":true}}`,
+	)
+
+	sessions, _, errs := scanClaude(home, time.Date(2026, 4, 28, 0, 0, 0, 0, time.UTC))
+	if len(errs) != 0 || len(sessions) != 1 {
+		t.Fatalf("unexpected scan result sessions=%#v errs=%#v", sessions, errs)
+	}
+	got := sessions[0].Plan
+	if got.Key != "claude-plan:/Users/fireharp/.claude/plans/shared-plan.md" || got.Title != "Claude implementation plan" || got.Status != "edited" {
+		t.Fatalf("unexpected claude plan: %#v", got)
+	}
+	if len(got.Items) != 3 || got.Items[1].Text != "Add plan metadata" {
+		t.Fatalf("expected plan items, got %#v", got.Items)
 	}
 }

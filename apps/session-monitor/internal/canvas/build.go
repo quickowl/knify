@@ -20,7 +20,9 @@ func BuildCanvas(cfg types.Config, sessions []types.LocalSession, health []types
 	sessions = sortSessionsByUpdatedAt(sessions)
 	FillSessionReviews(sessions, now)
 	counts := countMatches(sessions)
-	summary := fmt.Sprintf("Scanned %d local Codex/Claude sessions: %d exact, %d likely, %d unmatched.", len(sessions), counts["exact"], counts["likely"], counts["unmatched"])
+	planCounts := countPlans(sessions)
+	evidenceCounts := countEvidence(sessions, now)
+	summary := fmt.Sprintf("Scanned %d local Codex/Claude sessions: %d exact, %d likely, %d unmatched, %d with plans, %d evidence-ready. Daemon %s.", len(sessions), counts["exact"], counts["likely"], counts["unmatched"], planCounts["sessions"], evidenceCounts["ready"], daemonBuildLabel(cfg.Build))
 	blocks := []map[string]any{
 		{
 			"id":    "session-monitor-heading",
@@ -31,7 +33,7 @@ func BuildCanvas(cfg types.Config, sessions []types.LocalSession, health []types
 		{
 			"id":       "session-monitor-overview",
 			"kind":     "markdown",
-			"markdown": overviewMarkdown(sessions, health, scanErrors, hub, now),
+			"markdown": overviewMarkdown(cfg, sessions, health, scanErrors, hub, now),
 		},
 		{
 			"id":    "session-monitor-scan-metadata",
@@ -46,6 +48,8 @@ func BuildCanvas(cfg types.Config, sessions []types.LocalSession, health []types
 				"canvasCount":  len(hub.Canvases),
 				"runCount":     len(hub.Runs),
 				"nudgeEnabled": false,
+				"daemonBuild":  daemonBuildLabel(cfg.Build),
+				"daemonBinary": cfg.Build.BinaryPath,
 			},
 		},
 	}
@@ -55,10 +59,74 @@ func BuildCanvas(cfg types.Config, sessions []types.LocalSession, health []types
 		blockID := fmt.Sprintf("session-%02d-summary", i+1)
 		metaID := fmt.Sprintf("session-%02d-metadata", i+1)
 		label := fmt.Sprintf("%s: %s", core.DisplayProvider(session.Provider), session.Title)
-		badges := []string{session.Provider, core.FirstNonEmpty(session.Status, "unknown"), sessionActivityStatus(session, now), session.Match.Status}
+		attention := sessionAttention(session, now)
+		badges := []string{session.Provider, core.FirstNonEmpty(session.Status, "unknown"), sessionActivityStatus(session, now), session.Match.Status, "attention:" + attention, "evidence:" + review.EvidenceStatus}
 		if collapsed := session.Metadata["collapsedFiles"]; collapsed != "" {
 			badges = append(badges, "collapsed:"+collapsed)
 		}
+		if len(session.Artifacts) > 0 {
+			badges = append(badges, fmt.Sprintf("artifacts:%d", len(session.Artifacts)))
+		}
+		if session.Plan.Key != "" {
+			badges = append(badges, "plan")
+			if shared := planCounts[session.Plan.Key]; shared > 1 {
+				badges = append(badges, fmt.Sprintf("shared-plan:%d", shared))
+			}
+		}
+		childBlocks := []map[string]any{
+			{
+				"id":       blockID,
+				"kind":     "markdown",
+				"markdown": sessionMarkdown(session, now),
+			},
+		}
+		childBlockIDs := []string{blockID}
+		for _, artifactBlock := range sessionArtifactBlocks(i+1, session) {
+			childBlocks = append(childBlocks, artifactBlock)
+			childBlockIDs = append(childBlockIDs, core.StringValue(artifactBlock["id"]))
+		}
+		if nudgeBlock := manualNudgeBlock(i+1, session, review); nudgeBlock != nil {
+			childBlocks = append(childBlocks, nudgeBlock)
+			childBlockIDs = append(childBlockIDs, core.StringValue(nudgeBlock["id"]))
+		}
+		childBlocks = append(childBlocks, map[string]any{
+			"id":    metaID,
+			"kind":  "metadata",
+			"title": "Session metadata",
+			"metadata": map[string]any{
+				"provider":       session.Provider,
+				"sessionId":      session.SessionID,
+				"cwd":            session.CWD,
+				"status":         session.Status,
+				"sourcePath":     session.SourcePath,
+				"createdAt":      session.CreatedAt,
+				"updatedAt":      session.UpdatedAt,
+				"resumeHint":     session.ResumeHint,
+				"artifactCount":  len(session.Artifacts),
+				"evidenceStatus": review.EvidenceStatus,
+				"nudgePrompt":    review.NudgePrompt,
+				"artifactTitles": artifactTitles(session.Artifacts),
+				"matchStatus":    session.Match.Status,
+				"matchReason":    session.Match.Reason,
+				"matchCanvas":    session.Match.CanvasID,
+				"matchRun":       session.Match.RunID,
+				"matchScore":     session.Match.Score,
+				"matchEvidence":  session.Match.Evidence,
+				"purpose":        review.Purpose,
+				"currentState":   review.CurrentState,
+				"nextStep":       review.NextStep,
+				"signals":        strings.Join(review.Signals, "; "),
+				"planKey":        session.Plan.Key,
+				"planTitle":      session.Plan.Title,
+				"planSource":     session.Plan.Source,
+				"planStatus":     session.Plan.Status,
+				"planUpdatedAt":  session.Plan.UpdatedAt,
+				"planFilePath":   session.Plan.FilePath,
+				"planSummary":    session.Plan.Summary,
+				"planItems":      planItemsSummary(session.Plan),
+			},
+		})
+		childBlockIDs = append(childBlockIDs, metaID)
 		items = append(items, map[string]any{
 			"id":       fmt.Sprintf("session-%02d", i+1),
 			"label":    core.Truncate(label, 120),
@@ -66,40 +134,9 @@ func BuildCanvas(cfg types.Config, sessions []types.LocalSession, health []types
 			"status":   session.Match.Status,
 			"badges":   badges,
 			"addedAt":  core.FirstNonEmpty(session.UpdatedAt, core.FormatTime(now)),
-			"blockIds": []string{blockID, metaID},
+			"blockIds": childBlockIDs,
 		})
-		blocks = append(blocks,
-			map[string]any{
-				"id":       blockID,
-				"kind":     "markdown",
-				"markdown": sessionMarkdown(session, now),
-			},
-			map[string]any{
-				"id":    metaID,
-				"kind":  "metadata",
-				"title": "Session metadata",
-				"metadata": map[string]any{
-					"provider":      session.Provider,
-					"sessionId":     session.SessionID,
-					"cwd":           session.CWD,
-					"status":        session.Status,
-					"sourcePath":    session.SourcePath,
-					"createdAt":     session.CreatedAt,
-					"updatedAt":     session.UpdatedAt,
-					"resumeHint":    session.ResumeHint,
-					"matchStatus":   session.Match.Status,
-					"matchReason":   session.Match.Reason,
-					"matchCanvas":   session.Match.CanvasID,
-					"matchRun":      session.Match.RunID,
-					"matchScore":    session.Match.Score,
-					"matchEvidence": session.Match.Evidence,
-					"purpose":       review.Purpose,
-					"currentState":  review.CurrentState,
-					"nextStep":      review.NextStep,
-					"signals":       strings.Join(review.Signals, "; "),
-				},
-			},
-		)
+		blocks = append(blocks, childBlocks...)
 	}
 	pageSize := cfg.MaxSessions
 	if pageSize <= 0 {
@@ -113,11 +150,11 @@ func BuildCanvas(cfg types.Config, sessions []types.LocalSession, health []types
 		"pageSize": pageSize,
 		"items":    items,
 	}
-	blocks = append(blocks[:2], append([]map[string]any{collection}, blocks[2:]...)...)
+	blocks = append(blocks[:1], append([]map[string]any{collection}, blocks[1:]...)...)
 	if len(scanErrors) > 0 {
 		blocks = append(blocks, scanWarningsBlock(scanErrors))
 	}
-	blocks = append(blocks, providerHealthBlock(health), nextStepsBlock())
+	blocks = append(blocks, daemonBuildBlock(cfg.Build), providerHealthBlock(health), nextStepsBlock())
 	return types.Canvas{
 		ID:        cfg.CanvasID,
 		AgentID:   types.DefaultAgentID,
@@ -160,6 +197,7 @@ func CompactDynamicCanvas(canvas types.Canvas) types.Canvas {
 		"session-monitor-collection":      true,
 		"session-monitor-scan-metadata":   true,
 		"session-monitor-scan-warnings":   true,
+		"session-monitor-daemon-build":    true,
 		"session-monitor-provider-health": true,
 		"session-monitor-next-steps":      true,
 	}
@@ -175,8 +213,10 @@ func CompactDynamicCanvas(canvas types.Canvas) types.Canvas {
 	return canvas
 }
 
-func overviewMarkdown(sessions []types.LocalSession, health []types.ProviderHealth, scanErrors []string, hub types.HubState, now time.Time) string {
+func overviewMarkdown(cfg types.Config, sessions []types.LocalSession, health []types.ProviderHealth, scanErrors []string, hub types.HubState, now time.Time) string {
 	counts := countMatches(sessions)
+	planCounts := countPlans(sessions)
+	evidenceCounts := countEvidence(sessions, now)
 	providers := map[string]int{}
 	activity := map[string]int{}
 	for _, session := range sessions {
@@ -187,15 +227,25 @@ func overviewMarkdown(sessions []types.LocalSession, health []types.ProviderHeal
 	fmt.Fprintf(&b, "## What this view is for\n\n")
 	fmt.Fprintf(&b, "- Purpose: turn scattered local Codex and Claude work into a review queue with enough context to decide what needs attention.\n")
 	fmt.Fprintf(&b, "- Current state: newest sessions are sorted by update time, grouped by provider/session id, and labelled with match status against AgentCanvas hub runs/canvases.\n")
-	fmt.Fprintf(&b, "- Next decision: open rows that are active, unmatched, or collapsed; link useful sessions to canvases/runs later. V1 still does not nudge or resume sessions.\n\n")
+	fmt.Fprintf(&b, "- Next decision: open rows that are active, unmatched, missing evidence, or collapsed; link useful sessions to canvases/runs later. V1 still does not auto-nudge or auto-resume sessions.\n\n")
 	fmt.Fprintf(&b, "## Scan summary\n\n")
 	fmt.Fprintf(&b, "- Sessions: %d\n", len(sessions))
 	fmt.Fprintf(&b, "- Codex sessions: %d\n", providers["codex"])
 	fmt.Fprintf(&b, "- Claude sessions: %d\n", providers["claude"])
 	fmt.Fprintf(&b, "- Activity: active %d, recent %d, idle %d, stale %d\n", activity["active"], activity["recent"], activity["idle"], activity["stale"])
 	fmt.Fprintf(&b, "- Matches: exact %d, likely %d, unmatched %d\n", counts["exact"], counts["likely"], counts["unmatched"])
+	fmt.Fprintf(&b, "- Plans: %d sessions with plans, %d distinct plans, %d shared plans\n", planCounts["sessions"], planCounts["distinct"], planCounts["shared"])
+	fmt.Fprintf(&b, "- Evidence: ready %d, pending %d, missing %d\n", evidenceCounts["ready"], evidenceCounts["pending"], evidenceCounts["missing"])
+	fmt.Fprintf(&b, "- Daemon: %s", daemonBuildLabel(cfg.Build))
+	if cfg.Build.BinaryModifiedAt != "" {
+		fmt.Fprintf(&b, "; binary %s", cfg.Build.BinaryModifiedAt)
+	}
+	if cfg.Build.GoVersion != "" {
+		fmt.Fprintf(&b, "; %s", cfg.Build.GoVersion)
+	}
+	fmt.Fprintf(&b, "\n")
 	fmt.Fprintf(&b, "- Hub inventory: %d canvases, %d agent runs\n", len(hub.Canvases), len(hub.Runs))
-	fmt.Fprintf(&b, "- Nudge delivery: disabled in v1; resume hints are recorded for a later explicit action path.\n")
+	fmt.Fprintf(&b, "- Nudge delivery: manual only in v1; resume hints are recorded but never executed by the daemon.\n")
 	if len(scanErrors) > 0 {
 		fmt.Fprintf(&b, "- Scan warnings: %d, collapsed in the scan warning metadata block.\n", len(scanErrors))
 	}
@@ -206,6 +256,36 @@ func overviewMarkdown(sessions []types.LocalSession, health []types.ProviderHeal
 		}
 	}
 	return b.String()
+}
+
+func countEvidence(sessions []types.LocalSession, now time.Time) map[string]int {
+	counts := map[string]int{"ready": 0, "pending": 0, "missing": 0}
+	for _, session := range sessions {
+		counts[inferEvidenceStatus(session, now)]++
+	}
+	return counts
+}
+
+func countPlans(sessions []types.LocalSession) map[string]int {
+	counts := map[string]int{"sessions": 0, "distinct": 0, "shared": 0}
+	keys := map[string]int{}
+	for _, session := range sessions {
+		if session.Plan.Key == "" {
+			continue
+		}
+		counts["sessions"]++
+		keys[session.Plan.Key]++
+	}
+	counts["distinct"] = len(keys)
+	for _, count := range keys {
+		if count > 1 {
+			counts["shared"]++
+		}
+	}
+	for key, count := range keys {
+		counts[key] = count
+	}
+	return counts
 }
 
 func countMatches(sessions []types.LocalSession) map[string]int {
