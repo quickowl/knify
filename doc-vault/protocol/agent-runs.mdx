@@ -1,0 +1,160 @@
+---
+title: "Agent runs, agent events, and feedback callbacks"
+description: "How an agent registers a run, streams events, and receives feedback from a reviewer."
+---
+
+A canvas is the document. An **agent run** is the unit of agent work that produces and stewards a canvas. This document defines the run, the event stream agents push to the HUB, and the callback the HUB makes when feedback arrives.
+
+The source of truth for the wire types is `AgentRun`, `AgentEvent`, `FeedbackTarget`, `Callback`, `FeedbackDelivery` in [apps/hub/src/types.ts](../../apps/hub/src/types.ts).
+
+## Agent run
+
+```json
+{
+  "id": "run_…",
+  "provider": "claude_cli",
+  "agentId": "agent:openclaw",
+  "runId": "run_2026_05_12_001",
+  "canvasId": "canv_123",
+  "title": "Pixel Attribution Audit",
+  "mode": "review",
+  "status": "running",
+  "externalId": "thread_abc.turn_2",
+  "authRef": "OPENCLAW_HMAC_SECRET",
+  "webUrl": "https://example.com/runs/abc",
+  "traceUrl": "https://trace.example.com/abc",
+  "feedbackTarget": {
+    "provider": "claude_cli",
+    "mode": "cli",
+    "command": ["claude", "feedback"],
+    "cwd": "/work/repos/foo"
+  },
+  "metadata": { "branch": "main" }
+}
+```
+
+- `provider` — see [Providers](#providers). A HUB MUST reject unknown values.
+- `feedbackTarget` — describes where feedback should be delivered. The provider may differ from the run's primary provider; the reference Hub uses the target's provider to dispatch.
+- `authRef` — names an environment variable on the HUB that holds the HMAC secret used to sign outbound webhooks (see [auth.mdx#feedback-callback-signing](./auth.mdx#feedback-callback-signing)).
+- `status` — see [lifecycle.mdx#agent-run-status](./lifecycle.mdx#agent-run-status).
+
+A HUB MUST upsert an agent run by `id` on `POST /v1/agent-runs`. It MUST emit `agent.run.created` or `agent.run.updated` accordingly.
+
+## Agent events
+
+An `AgentEvent` is a single observation about a run. It is **not** a canvas update; canvas updates use canvas log events (see [lifecycle.mdx#canvas-log-events](./lifecycle.mdx#canvas-log-events)).
+
+```json
+{
+  "id": "evt_…",
+  "provider": "claude_cli",
+  "agentRunId": "run_…",
+  "externalId": "turn_2",
+  "type": "turn.completed",
+  "status": "waiting_for_feedback",
+  "sequence": 17,
+  "payload": { "tokens": { "input": 1234, "output": 5678 }, "canvasId": "canv_123" },
+  "traceUrl": "https://trace.example.com/abc#turn-2",
+  "occurredAt": "2026-05-12T12:34:56Z"
+}
+```
+
+Recording rules:
+
+- `POST /v1/agent-events` records the event.
+- If `status` is present, the HUB MUST update the parent agent run's `status` and `lastEventId`.
+- The HUB emits `agent.event.created` and, when the run is updated, `agent.run.updated`.
+
+The `type` field is **agent‑defined**. The protocol does not enumerate types; agents MAY use any namespace (e.g. `turn.started`, `tool.invoked`, `notice`). A HUB MUST NOT reject events for unknown `type` values.
+
+## Observer {#observer}
+
+A HUB MAY enable a lifecycle observer that scrutinises agent events for missing canvas evidence. When enabled (the reference Hub reads `AGENTCANVAS_OBSERVER_ENABLED`), `POST /v1/agent-events/evaluate` records the event AND returns an `ObserverDecision`:
+
+```json
+{
+  "id": "observer-decision_…",
+  "eventId": "evt_…",
+  "provider": "claude_cli",
+  "agentRunId": "run_…",
+  "canvasId": "canv_123",
+  "mode": "nudge",
+  "action": "nudge",
+  "issues": [
+    {
+      "rule": "ready_canvas_missing_verification_evidence",
+      "severity": "warning",
+      "message": "ready-for-review canvas is missing terminal, diff, image, or checked checklist evidence"
+    }
+  ],
+  "nudgePrompt": "AgentCanvas lifecycle observer found missing review evidence…"
+}
+```
+
+The HUB MUST emit `agent.observer.decision`. The `mode` reflects the HUB's policy; the `action` is the recommended response (`allow`, `log`, `dry_run`, `nudge`, `block`).
+
+## Feedback callbacks
+
+A `Feedback` record carries a `decision` (`accepted` | `needs_changes` | `comment_only`) and optional `text`, `voiceTranscript`, `inkAssetId`, `targetBlockIds`, `targetAnchors`.
+
+When a canvas has a `callback` (or `POST /v1/agent-runs/:id/feedback` was used), the HUB creates a `FeedbackDelivery` and dispatches it. The delivery progresses through the states in [lifecycle.mdx#reliability](./lifecycle.mdx#reliability).
+
+### Webhook callback body
+
+For `webhook` and `generic_cloud` providers, the HUB POSTs:
+
+```json
+{
+  "type": "feedback.created",
+  "canvas":  { ... full Canvas ... },
+  "feedback":{ ... full Feedback ... },
+  "deliveryId": "feedback-delivery_…",
+  "agentRun": { ... full AgentRun (if known) ... },
+  "metadata": { ... target.metadata ... }
+}
+```
+
+Headers:
+
+- `Content-Type: application/json`
+- `Idempotency-Key: <deliveryId>`
+- `X-AgentCanvas-Timestamp: <unix-seconds>` (when signing)
+- `X-AgentCanvas-Signature: <hmac-sha256-hex>` (when signing)
+- any custom `headers` configured on the target
+
+A receiver SHOULD respond with `2xx` and an empty body. A non‑2xx response causes a retry (subject to `maxAttempts`).
+
+### Cursor callback
+
+For the `cursor` provider, the HUB POSTs to `<target.url or https://api.cursor.com>/v0/agents/<externalId>/followup` with body `{ "prompt": { "text": "<formatted feedback>" } }` and `Authorization: Bearer <secret from authRef>`. The receiver's response `id` (if any) is captured as the delivery receipt's `providerMessageId`.
+
+### Callback signing {#callback-signing}
+
+When `feedbackTarget.authRef` resolves to a non‑empty secret on the HUB, outbound webhooks are signed. See [auth.mdx#feedback-callback-signing](./auth.mdx#feedback-callback-signing).
+
+## Sidecar providers {#sidecar}
+
+Providers that require a process not available inside a Cloudflare Worker (`cursor_cli`, `codex`, `codex_exec`, `claude`, `claude_cli`) are not edge‑deliverable. For these providers, the HUB queues the delivery and MUST surface it through `GET /v1/feedback-deliveries?status=queued&provider=<name>`. A sidecar process running near the agent (e.g. on the agent's host) MUST:
+
+1. Poll or subscribe for queued deliveries it can handle.
+2. Execute the configured `command` in the configured `cwd`, piping the feedback text in.
+3. POST `POST /v1/feedback-deliveries/:id/retry` is **not** used for sidecar success; instead the sidecar MAY post a synthetic agent event documenting the action and MAY mark the delivery delivered via a future Hub endpoint (the current protocol does not expose a `mark-delivered` route; see [conformance.mdx](./conformance.mdx) for the open extension).
+
+The list of providers, their `mode` field, and the `command`/`cwd`/`headers`/`metadata` they consume is open and version‑negotiated between agents and their sidecars; the HUB stores them verbatim.
+
+## Providers
+
+The closed set in this MAJOR is:
+
+| Provider | Edge‑deliverable | Notes |
+|---|---|---|
+| `webhook` | yes | Generic POST. |
+| `generic_cloud` | yes | Same wire as webhook; different mental model on the agent side. |
+| `cursor` | yes | Cursor background agents follow‑up API. |
+| `cursor_cli` | no | Cursor CLI sidecar. |
+| `codex` | no | Codex app‑server sidecar. |
+| `codex_exec` | no | Codex exec sidecar. |
+| `claude` | no | Claude SDK sidecar. |
+| `claude_cli` | no | Claude Code sidecar. |
+
+A future MINOR bump MAY add providers. A HUB MUST reject unknown providers on writes.

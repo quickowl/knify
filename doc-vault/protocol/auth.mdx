@@ -1,0 +1,113 @@
+---
+title: "Auth & identity"
+description: "Bearer tokens, API keys, viewer link sessions, identity, and security posture."
+---
+
+The Knify Canvas Protocol defines three authentication mechanisms. Every authenticated request to a HUB MUST present one of them via the `Authorization: Bearer <token>` header.
+
+## Authentication mechanisms
+
+### Internal bearer token
+
+- A HUB MAY accept a single static bearer token configured out of band (the reference Hub reads `AGENTCANVAS_TOKEN`, `CANVAS_HUB_TOKEN`, or `HUB_TOKEN`; see [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+- A request authenticated by the internal token has `internal = true` and is **not** scoped to a workspace — it sees all canvases. A HUB MUST treat this as a privileged credential.
+- This mechanism is intended for development, local agents, and trusted service‑to‑service traffic.
+
+### API keys (Unkey)
+
+- A HUB MAY accept third‑party bearer tokens verified by an external API key service. The reference Hub uses [Unkey](https://www.unkey.com) (`AGENTCANVAS_UNKEY_ROOT_KEY`, `AGENTCANVAS_UNKEY_VERIFY_URL`).
+- The verifier MUST return a `workspaceId` for every valid key. The HUB MUST scope every subsequent request to that workspace. The reference Hub resolves the workspace id from `metadata.workspaceId`, `metadata.workspace_id`, `metadata.tenantId`, `metadata.tenant_id`, `metadata.orgId`, or `metadata.organizationId`, falling back to the key id (see `unkeyVerifier` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+- If the verifier is unreachable, a HUB MUST return `503 unavailable` (not 401), so callers know to retry.
+
+### Viewer link sessions
+
+Viewer links are short‑lived, capability‑scoped credentials handed out to a person or device that should be able to see exactly one canvas without holding a workspace‑level API key.
+
+A viewer link has:
+
+- `id` — opaque server‑generated identifier
+- A secret known only to the recipient
+- `kind` — `configuration` or `share`
+- `scope` — currently always `canvas`
+- `canvasId` — the single canvas the link grants access to
+- `capabilities` — a subset of:
+  - `canvas.read` — read the canvas snapshot
+  - `canvas.live` — subscribe to `GET /v1/events` filtered to this canvas
+  - `asset.read` — fetch assets referenced by this canvas
+  - `feedback.submit` — submit feedback against this canvas
+
+The flow:
+
+1. A workspace‑authenticated caller POSTs `POST /v1/viewer-links/preflight` to validate the request (the response is `ready` or `blocked` with a check list — see [hub-api.mdx](./hub-api.mdx)).
+2. The caller POSTs `POST /v1/viewer-links` and receives a viewer code shaped `<id>.<secret>` and a `url` of the form `https://knify.link/c/<id>.<secret>`.
+3. The recipient device POSTs the secret to `POST /v1/viewer-links/<id>/exchange` (no bearer token required — this endpoint is public).
+4. The HUB returns a `sessionToken` of the form `<sessionId>.<sessionSecret>` and an `expiresAt`. The session expires 12 hours after issue in the reference Hub.
+5. Subsequent requests carry `Authorization: Bearer <sessionToken>`. The HUB MUST enforce `scope = canvas` and the issued `capabilities` on every request — see `handleViewerSession` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+
+A HUB MUST hash secrets at rest (the reference Hub uses SHA‑256; see `secretHash`). A HUB MUST NOT log or return the raw secret after creation.
+
+## Identity
+
+Every entity in the protocol carries an identity string in one of these forms:
+
+| Field | Where | Form |
+|---|---|---|
+| `agentId` | canvas, agent run | Free‑form string the agent picks (e.g. `agent:openclaw`). A HUB MUST NOT interpret it. |
+| `runId` | canvas, agent run | Free‑form, unique per agent. |
+| `workspaceId` | server‑side stamp | Resolved from the API key. Internal tokens leave it empty. |
+| Viewer session | derived from viewer link | Carries `canvasId` and `capabilities`; carries no human identity. |
+
+A HUB SHOULD stamp `createdAt` and `updatedAt` on every entity it persists (ISO‑8601 UTC). Producers MAY supply their own `createdAt`; the HUB SHOULD preserve it if present.
+
+## Authorization
+
+A HUB MUST enforce these rules:
+
+- Internal token: full access across all workspaces.
+- API key: access limited to records whose `workspaceId` matches the verified workspace.
+- Viewer session: access limited to the bound `canvasId` and the granted capabilities. Requests for any other canvas MUST return `403 forbidden`.
+
+The reference enforcement helper is `workspaceVisible(record.workspaceId, auth.workspaceId)` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts). A record is visible if the request is internal, or if the record has no workspace id (legacy), or if the workspace ids match.
+
+## Security {#security}
+
+This section MUST be read alongside [errors.mdx](./errors.mdx) and the HTTP routes in [hub-api.mdx](./hub-api.mdx).
+
+### Trust boundary
+
+- The HUB is the trust boundary for canvas persistence and feedback delivery. It owns auth, workspace isolation, and the feedback callback dispatch.
+- Agents and viewers are **clients**. The HUB MUST NOT trust client‑supplied `workspaceId`, `createdAt` overrides on identity records, or anything that contradicts a verified credential.
+
+### Feedback callback signing
+
+Outbound feedback callbacks MAY be signed. When the feedback target carries an `authRef` that resolves to a non‑empty secret (the reference Hub reads it from the worker env), the HUB MUST add these headers to the outbound POST:
+
+- `X-AgentCanvas-Timestamp` — integer Unix seconds at dispatch time
+- `X-AgentCanvas-Signature` — lowercase hex of HMAC‑SHA256 over `<timestamp>.<body>` using the secret
+- `Idempotency-Key` — the delivery id
+
+Receiving agents MUST verify the signature within a clock‑skew tolerance (5 minutes is recommended) and MUST reject duplicate `Idempotency-Key`s.
+
+### CORS
+
+A HUB MUST scope CORS to an explicit allow‑list of origins (the reference Hub reads `AGENTCANVAS_CORS_ORIGINS`). A HUB MUST NOT echo arbitrary `Origin` headers.
+
+### Secret handling
+
+A HUB MUST NOT log bearer tokens, viewer secrets, or signing keys.
+
+A HUB MUST validate that viewer secrets contain only URL‑safe characters (`[A-Za-z0-9_-]`) before any comparison or display (see `validateViewerSecret` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+
+### Asset access
+
+A viewer session with `asset.read` MUST only be able to fetch assets that are referenced by its bound canvas. The reference Hub enforces this via `canvasReferencesAsset` before serving any asset to a viewer session.
+
+## API keys {#api-keys}
+
+The mapping between an API key and a workspace MUST be invariant for the lifetime of the key. Rotating the workspace assignment of an existing key is undefined behavior; implementations SHOULD revoke and reissue.
+
+## Viewer links {#viewer-links}
+
+A viewer link is a one‑use unwrapping credential. The exchange endpoint MUST be callable without an `Authorization` header (the reference Hub special‑cases `POST /v1/viewer-links/<id>/exchange` in `isPublicViewerExchange`). After exchange, the link MAY remain usable until expiry or revocation — implementations MAY make the link single‑use, but MUST NOT make it multi‑use beyond what was declared at creation.
+
+A viewer **session** issued by exchange MUST expire after a bounded TTL. The reference Hub uses 12 hours and refreshes `lastUsedAt` on each call.

@@ -1,0 +1,120 @@
+---
+title: "Conformance"
+description: "Normative language, versioning policy, extension rules, and the conformance test matrix."
+---
+
+This document defines how an implementation declares conformance to the Knify Canvas Protocol.
+
+## Normative language
+
+The keywords **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, **MAY** in this specification are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) and [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174) when, and only when, they appear in all capitals.
+
+A conforming implementation MUST satisfy every MUST clause that applies to its declared role (Agent, Hub, Viewer/Consumer). SHOULD clauses are strongly expected but MAY be violated with documented justification.
+
+## Roles
+
+Every implementation MUST declare which of the three roles it implements:
+
+- **AGENT** — publishes canvases to a Hub, optionally receives feedback through a callback
+- **HUB** — exposes the Knify HTTP API and persists canvases, events, feedback, agent runs, assets, viewer links
+- **VIEWER** (also: **API consumer**) — reads canvases, exports, and the event stream
+
+An implementation MAY implement more than one role. The Reference Hub at [apps/hub/](../../apps/hub/) is a conforming HUB. The bundled web and iPad viewers are conforming VIEWERs.
+
+## Protocol identifier and versioning
+
+The protocol version is encoded in the `schema_version` field on every canvas and in the `schemaVersion` field on every exported bundle. The format is:
+
+```text
+knify.canvas.vMAJOR.MINOR
+```
+
+Current version: `knify.canvas.v0.1`.
+
+### Versioning rules
+
+- A **MINOR** bump (e.g. v0.1 → v0.2) MUST be backwards‑compatible at the wire level. Existing canvases and existing producers continue to work.
+- A **MAJOR** bump (e.g. v0.x → v1.0) MAY break compatibility. Producers MUST stamp the new `schema_version`. Hubs MUST reject canvases whose `schema_version` they do not support with a `bad_request` error (see [errors.mdx](./errors.mdx)).
+- Hubs MUST accept canvases at the current MAJOR version and at the previous MAJOR version for the duration of a published deprecation window.
+- Viewers MUST render a fallback for unknown `block.kind` values (see [blocks.mdx](./blocks.mdx#fallback)) and SHOULD render a fallback for unknown `schema_version` MINOR bumps within the same MAJOR.
+
+### Capability declaration
+
+Implementations MUST document which `schema_version` values they support. A HUB SHOULD expose this from `GET /v1/healthz` in a future MINOR bump; until then it is documentation‑only.
+
+## Extension points
+
+The protocol is extensible in three ways.
+
+### Unknown‑field tolerance
+
+- A HUB MUST reject **top‑level** fields it does not recognize on writes (the reference Hub uses an explicit allowlist; see `canvasKeys`, `agentRunKeys`, `feedbackKeys` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)) — this preserves forward error reporting.
+- A HUB MAY accept and round‑trip nested fields it does not recognize inside `meta`, `metadata`, `payload`, and `block.metadata`. These are reserved for extension data.
+- A VIEWER MUST ignore fields it does not recognize and continue rendering.
+
+### Extension namespaces
+
+- Custom block properties on existing block kinds MUST be namespaced under `x_` (snake) or `x-` (kebab) keys. Example: `block.x_attribution`. Built‑in keys MUST NOT begin with `x_` or `x-`.
+- Custom `meta`, `metadata`, and `payload` keys SHOULD use a reverse‑DNS prefix when collisions are likely (e.g. `com.example.attribution`).
+- Custom block kinds MUST use a `vendor.kind` form (e.g. `acme.attribution-table`). Vanilla protocol block kinds MUST NOT contain a dot.
+
+### Capability negotiation (viewer links)
+
+Viewer links expose a closed set of capabilities (see [auth.mdx#viewer-links](./auth.mdx#viewer-links)). The current set is:
+
+- `canvas.read`
+- `canvas.live`
+- `asset.read`
+- `feedback.submit`
+
+A HUB MUST reject unknown capabilities at preflight (see `handleViewerLinksPreflight` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). Adding new capabilities is a MINOR bump.
+
+## Conformance tests
+
+A conforming implementation MUST pass the **Core** tests for its role. **Extension** tests are required only for the extensions the implementation claims to support.
+
+### AGENT — Core
+
+| Test | Source of truth |
+|---|---|
+| Produces a canvas whose JSON validates against [schema.mdx](./schema.mdx) | `canvasKeys` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Stamps every block with a stable `id` | [schema.mdx#stable-ids](./schema.mdx) |
+| Emits canvas log events in the order specified by [lifecycle.mdx](./lifecycle.mdx) | `CanvasLogEventType` in [types.ts](../../apps/hub/src/types.ts) |
+| Honours the canvas status transitions in [lifecycle.mdx](./lifecycle.mdx#canvas-status) | |
+| Submits with a valid bearer token and surfaces the Hub error code on failure | [auth.mdx](./auth.mdx), [errors.mdx](./errors.mdx) |
+| Verifies HMAC on feedback callbacks when a signing secret is configured | [agent-runs.mdx#callback-signing](./agent-runs.mdx#callback-signing) |
+
+### HUB — Core
+
+| Test | Source of truth |
+|---|---|
+| Implements every route listed in [hub-api.mdx](./hub-api.mdx) with the documented verbs and status codes | [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Returns the [errors.mdx](./errors.mdx) envelope for every non‑2xx response | |
+| Rejects unknown top‑level fields on writes | `rejectUnknown` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Enforces optimistic concurrency on `POST /v1/canvases/:id/edits` via `expectedVersion` | `handleCanvasEdits` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Emits the Hub event stream over SSE as specified in [live-events.mdx](./live-events.mdx) | `handleEvents` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Retries feedback deliveries with exponential backoff and dead‑letters at `maxAttempts` | `processDelivery` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Enforces workspace isolation on every authenticated request | `workspaceVisible` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Validates viewer link secrets and scopes sessions to a single canvas | `handleViewerSession` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+
+### VIEWER — Core
+
+| Test | Source of truth |
+|---|---|
+| Exchanges a viewer link code for a session token | [auth.mdx#viewer-link-exchange](./auth.mdx#viewer-link-exchange) |
+| Reads `GET /v1/canvases/:id` and renders every block kind in [blocks.mdx](./blocks.mdx) | |
+| Renders an unknown `block.kind` as a labeled fallback | [blocks.mdx#fallback](./blocks.mdx#fallback) |
+| Subscribes to `GET /v1/events` and applies canvas updates in order | [live-events.mdx](./live-events.mdx) |
+| Reconnects with `Last-Event-ID` after a transport break | [live-events.mdx#reconnect](./live-events.mdx#reconnect) |
+| Treats viewer session token as `Bearer` and refreshes by re‑exchanging the link before expiry | [auth.mdx#viewer-links](./auth.mdx#viewer-links) |
+
+### Extension tests
+
+- A HUB that exposes Unkey‑verified API keys MUST validate the workspace‑id metadata mapping defined in [auth.mdx#api-keys](./auth.mdx#api-keys).
+- A HUB that supports the canvas `import`/`export` bundle MUST round‑trip a bundle through `POST /v1/canvases/import` and `GET /v1/canvases/:id/export` without loss.
+- A HUB that supports sidecar agent providers (any of `cursor_cli`, `codex`, `codex_exec`, `claude`, `claude_cli`) MUST document how it dispatches to them; the protocol only requires that edge‑deliverable providers (`webhook`, `generic_cloud`, `cursor`) work without a sidecar.
+- A HUB that enables the observer MUST emit `agent.observer.decision` events as specified in [agent-runs.mdx#observer](./agent-runs.mdx#observer).
+
+## Implementation checklist
+
+See [checklists.mdx](./checklists.mdx) for role‑specific implementation checklists.

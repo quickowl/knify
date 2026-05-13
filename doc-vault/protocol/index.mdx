@@ -1,0 +1,79 @@
+---
+title: "Knify Canvas Protocol"
+description: "An open protocol for typed-block canvases that agents publish, humans review, and machines consume."
+---
+
+The Knify Canvas Protocol defines how agents, hubs, and viewers exchange typed‑block documents called **canvases**. It is an open protocol: any third party MAY implement it as an **agent**, a **hub**, or a **viewer** without coordination with the reference implementation in this monorepo.
+
+For the structural comparison against OpenAI's Symphony SPEC that motivated this document set, see [gap-report.mdx](./gap-report.mdx).
+
+## Goals
+
+- **One document shape, many producers.** Any agent — a CLI, a cloud function, a Cursor or Codex run, a Claude Code session — MUST be able to publish to a conforming hub using the same wire types ([schema.mdx](./schema.mdx), [blocks.mdx](./blocks.mdx)).
+- **Blocks for humans, exports for machines.** A canvas is renderable to a person and queryable as structured data. Named exports are a stable contract for downstream automation ([exports-api.mdx](./exports-api.mdx)).
+- **Static and dynamic canvases.** A canvas MAY be published once as a snapshot, or assembled over time via a stream of log events ([lifecycle.mdx#canvas-log-events](./lifecycle.mdx#canvas-log-events), [live-events.mdx](./live-events.mdx)).
+- **Reviewable.** Canvases progress through a small status lifecycle. Feedback flows back to the producing agent over a signed callback or a sidecar ([agent-runs.mdx](./agent-runs.mdx), [lifecycle.mdx](./lifecycle.mdx)).
+- **Implementable from the spec alone.** Auth, errors, state machines, the live‑events transport, and conformance criteria are documented normatively. See [conformance.mdx](./conformance.mdx) and [checklists.mdx](./checklists.mdx).
+
+## Non‑goals
+
+- **Not a general document database.** The protocol is opinionated about the document model (typed blocks, named exports, status lifecycle); it is not a substitute for a generic CMS or knowledge graph.
+- **Not a workflow engine.** Agents own their own scheduling, retries, and prompt logic. The hub owns persistence, fan‑out, and feedback delivery.
+- **Not a UI framework.** Block kinds describe *what* to render, not *how*. Viewers MAY render the same kind very differently.
+- **Not a transport spec.** The wire format is JSON over HTTP. Live updates are SSE. Future transports MAY be added, but only as MINOR additions that preserve HTTP/JSON.
+- **Not a permission system for arbitrary actors.** The auth model is workspace + viewer session; multi‑tenant access control beyond that is out of scope ([auth.mdx](./auth.mdx)).
+
+## Three implementer roles
+
+The protocol exposes three roles. An implementation MUST declare which role(s) it implements and MUST satisfy that role's checklist in [checklists.mdx](./checklists.mdx).
+
+### AGENT (publisher)
+
+Produces canvases and consumes feedback callbacks. An agent MAY be a one‑shot script, a long‑running daemon, or a CLI invoked by a human. Agents push state to the hub and read it back; they are not the source of truth for storage.
+
+See [schema.mdx](./schema.mdx), [agent-runs.mdx](./agent-runs.mdx), [checklists.mdx#agent-checklist](./checklists.mdx#agent-checklist).
+
+### HUB (server)
+
+Stores canvases, snapshots, edits, feedback, agent runs, agent events, assets, and viewer links. Fans out a live event stream. Delivers feedback to callback targets. The reference Hub at [apps/hub](../../apps/hub) is a Cloudflare Worker; any HTTP server can be a HUB so long as it satisfies the HUB checklist.
+
+See [hub-api.mdx](./hub-api.mdx), [auth.mdx](./auth.mdx), [errors.mdx](./errors.mdx), [lifecycle.mdx](./lifecycle.mdx), [checklists.mdx#hub-checklist](./checklists.mdx#hub-checklist).
+
+### VIEWER / API consumer
+
+Reads canvases, exports, and the live event stream. A viewer MAY be a human‑facing iPad or web app, or a machine consumer that reads named exports. Both are governed by the same auth model and the same forward‑compatibility rules.
+
+See [exports-api.mdx](./exports-api.mdx), [live-events.mdx](./live-events.mdx), [checklists.mdx#viewer-and-api-consumer-checklist](./checklists.mdx#viewer-and-api-consumer-checklist).
+
+## System hierarchy
+
+```text
+                  ┌──────────────────────────────────────┐
+                  │              HUB                     │
+   AGENT  ──────► │  /v1/canvases, /v1/agent-runs,       │ ◄──── VIEWER
+   (writes)       │  /v1/events (SSE), /v1/viewer-links  │       (reads)
+                  └────────────────┬─────────────────────┘
+                                   │
+                       feedback callback (signed)
+                                   │
+                                   ▼
+                       AGENT  feedback target
+```
+
+See [architecture.mdx](../architecture.mdx) for the full diagram and sequence flows.
+
+## Reading order
+
+For implementers, read in this order:
+
+1. [conformance.mdx](./conformance.mdx) — normative language, versioning, extension rules, conformance tests
+2. [auth.mdx](./auth.mdx) and [errors.mdx](./errors.mdx) — what every request looks like
+3. [schema.mdx](./schema.mdx), [blocks.mdx](./blocks.mdx), [lifecycle.mdx](./lifecycle.mdx) — what a canvas is
+4. [hub-api.mdx](./hub-api.mdx) — the full route table
+5. [agent-runs.mdx](./agent-runs.mdx), [live-events.mdx](./live-events.mdx), [exports-api.mdx](./exports-api.mdx) — runtime behavior
+6. [checklists.mdx](./checklists.mdx) and [recipes.mdx](./recipes.mdx) — what to actually build
+7. [gap-report.mdx](./gap-report.mdx) — context for why this document set exists
+
+## Current version
+
+`knify.canvas.v0.1`. See [conformance.mdx#protocol-identifier-and-versioning](./conformance.mdx#protocol-identifier-and-versioning).

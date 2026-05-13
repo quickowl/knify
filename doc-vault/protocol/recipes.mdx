@@ -1,0 +1,154 @@
+---
+title: "Reference recipes"
+description: "Reference pseudocode for the most common flows in each implementer role."
+---
+
+The recipes here are language‑agnostic. They show *what* a conforming implementation does, not *how*. Each step links to the normative section.
+
+## AGENT: publish a static canvas
+
+```text
+1. authenticate
+   token = workspace_api_key     # see auth.mdx
+2. build canvas
+   canvas = {
+     id, agentId, runId,
+     title, summary, priority, status: "ready_for_review",
+     version: 1,
+     blocks: [ ... with stable ids ... ]
+   }                              # see schema.mdx, blocks.mdx
+3. POST /v1/canvases              # see hub-api.mdx
+   on 201: store canvas.id
+   on 4xx: surface errors.envelope.code; do not retry
+   on 5xx: backoff and retry
+4. (optional) post a viewer link
+   preflight = POST /v1/viewer-links/preflight { canvasId, kind:"share", capabilities }
+   if preflight.status == "ready":
+     link  = POST /v1/viewer-links { ... ttlSeconds: 3600 }
+     share link.url with the recipient
+```
+
+## AGENT: stream a dynamic canvas
+
+```text
+1. POST /v1/canvases/:id/events
+   { type: "canvas.started", title, summary, status: "in_progress" }
+2. for each phase:
+     POST /v1/canvases/:id/events
+       { type: "canvas.block.appended", block: { id, kind, ... } }
+3. when complete:
+     POST /v1/canvases/:id/events
+       { type: "canvas.summary.updated", status: "ready_for_review" }
+     POST /v1/canvases/:id/events
+       { type: "canvas.completed" }   # hub snapshots automatically
+```
+
+All events MUST carry a unique `id`. Retrying with the same `id` is a no‑op. ([lifecycle.mdx#canvas-log-events](./lifecycle.mdx#canvas-log-events))
+
+## AGENT: receive a feedback callback
+
+```text
+on POST /your/webhook:
+  reject if header Idempotency-Key seen before  # dedupe per delivery id
+  if signing secret configured:
+    ts  = header X-AgentCanvas-Timestamp
+    sig = header X-AgentCanvas-Signature
+    if abs(now() - ts) > 5 minutes: reject
+    expect_sig = hmac_sha256_hex(secret, ts + "." + raw_body)
+    if not constant_time_eq(expect_sig, sig): reject
+  body = parse_json(raw_body)
+  # body shape: { type:"feedback.created", canvas, feedback, deliveryId, agentRun, metadata }
+  apply_decision(body.feedback.decision, body.canvas, body.feedback.text)
+  return 200
+```
+
+See [auth.mdx#feedback-callback-signing](./auth.mdx#feedback-callback-signing) and [agent-runs.mdx](./agent-runs.mdx).
+
+## AGENT: rebase an edit that conflicted
+
+```text
+loop:
+  edit = build_edit(expectedVersion: canvas.version, ops: [...])
+  res  = POST /v1/canvases/:id/edits edit
+  if res.status == 201: break
+  if res.status == 409:
+    canvas = GET /v1/canvases/:id          # refresh
+    rebuild ops against new canvas state
+    continue
+  else: surface res.error.code
+```
+
+## HUB: poll loop for sidecar feedback deliveries
+
+The HUB queues sidecar‑bound deliveries (providers that are not edge‑deliverable). The sidecar's loop:
+
+```text
+loop:
+  list = GET /v1/feedback-deliveries?status=queued&provider=<own>
+  for each delivery in list:
+    feedback = GET (already in delivery payload after fetch by id)
+    run      = delivery.target  # carries command, cwd, headers, metadata
+    try:
+      execute run.command in run.cwd, piping formatted feedback in
+      # protocol gap: there is no public mark-delivered route yet.
+      # current workaround: surface a synthetic AgentEvent and leave delivery
+      # to operator-driven retry/dead-letter. Track in conformance.mdx.
+    except:
+      let exponential backoff happen via POST /v1/feedback-deliveries/:id/retry
+  sleep(interval)
+```
+
+The lack of a public `mark-delivered` endpoint is a known open extension; see [conformance.mdx#sidecar](./conformance.mdx) and [agent-runs.mdx#sidecar](./agent-runs.mdx#sidecar).
+
+## VIEWER: read‑only consumer
+
+```text
+1. on first paint:
+   canvas = GET /v1/canvases/:id     # see hub-api.mdx
+   render(canvas.blocks)
+2. subscribe to live updates:
+   stream = GET /v1/events  (Authorization: Bearer <session-token>)
+   for each event in stream:
+     remember event.id as Last-Event-ID
+     switch event.type:
+       case "canvas.updated":         canvas = event.data; rerender
+       case "canvas.event.created":   apply log event to local model
+       case "canvas.snapshot.created": ignore (history)
+       case "feedback.*":             update reviewer-facing badges
+       case "agent.observer.decision": surface as warning
+       default: ignore (forward compatibility)
+3. on transport break:
+   reconnect GET /v1/events with header Last-Event-ID: <last seen>
+```
+
+See [live-events.mdx](./live-events.mdx) and [hub-api.mdx#hub-event-types](./hub-api.mdx#hub-event-types).
+
+## VIEWER: submit feedback
+
+```text
+POST /v1/canvases/:id/feedback
+  Authorization: Bearer <viewer-session-token>
+  body: { decision: "needs_changes", text: "Please rerun with --strict",
+          targetBlockIds: ["summary"] }
+on 201 (no callback configured): feedback stored, no delivery
+on 202 (callback configured):    feedback stored + delivery queued
+```
+
+## API consumer: read a stable export
+
+```text
+val = GET /v1/canvases/:id/exports/:name
+```
+
+`val` MUST be the value at the export's `path` inside the canvas `data`. See [exports-api.mdx](./exports-api.mdx). Treat the export's `stable: true` flag as a contract; if it disappears in a new `schema_version`, the contract is broken — surface the error.
+
+## Implementation references
+
+The reference Hub implements every recipe above:
+
+- [apps/hub/src/app.ts](../../apps/hub/src/app.ts) — routes, auth, dispatch
+- [apps/hub/src/types.ts](../../apps/hub/src/types.ts) — wire types
+- [apps/hub/src/validation.ts](../../apps/hub/src/validation.ts) — normalization and validation
+- [apps/hub/src/events.ts](../../apps/hub/src/events.ts) — SSE event bus over Durable Objects
+
+The reference viewer ([apps/viewer-web](../../apps/viewer-web), [apps/viewer-ipad](../../apps/viewer-ipad)) implements the VIEWER recipes, and the [agentic-canvas](../../.claude/skills/agentic-canvas) skill encodes the AGENT recipes for Claude Code agents.

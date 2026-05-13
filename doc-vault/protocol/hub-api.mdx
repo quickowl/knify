@@ -1,0 +1,278 @@
+---
+title: "Hub API reference"
+description: "The normative HTTP surface a conforming Hub MUST expose."
+---
+
+This document is the normative HTTP surface of the Knify Canvas Protocol. A conforming HUB MUST expose every endpoint listed under [Core](#core), with the documented verbs, status codes, and request/response shapes.
+
+The shapes below are drawn from [apps/hub/src/types.ts](../../apps/hub/src/types.ts). The route table is drawn from [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+
+## Conventions
+
+- Base path: every endpoint is rooted at `/v1`.
+- Content type: requests and responses MUST be `application/json`, except asset bodies and the SSE stream.
+- Authentication: every endpoint requires a bearer token, except `GET /v1/healthz` and `POST /v1/viewer-links/<id>/exchange`. See [auth.mdx](./auth.mdx).
+- Errors: every non‑2xx response uses the envelope in [errors.mdx](./errors.mdx).
+- IDs: every `*Id` is a string. The HUB MUST validate id charset and length (see `validateID` in [apps/hub/src/utils.ts](../../apps/hub/src/utils.ts)). A request that supplies an invalid id MUST return `400 bad_request`.
+
+## Core {#core}
+
+### Health
+
+```http
+GET /v1/healthz
+```
+
+Returns `200 { "ok": true, "service": "agentcanvas-hub" }`. No auth.
+
+### Canvases
+
+```http
+POST /v1/canvases
+GET  /v1/canvases?agentId=&runId=&status=
+```
+
+`POST` accepts a [Canvas](./schema.mdx) and returns `201 Canvas`. If the id already exists, the previous canvas is snapshotted (`SNAPSHOT_STATIC_OVERWRITE`) before the overwrite. The HUB emits `canvas.created` or `canvas.updated`.
+
+`GET` returns all canvases visible to the caller's workspace, optionally filtered.
+
+```http
+GET  /v1/canvases/:id
+```
+
+Returns `200 Canvas` or `404 not_found`.
+
+```http
+POST /v1/canvases/import
+```
+
+Imports a `CanvasBundle` (see [Bundles](#bundles)). Body: `{ bundle, conflictPolicy?: "fail" | "replace" }`. Returns `201 CanvasImportResult`.
+
+```http
+GET  /v1/canvases/:id/events
+POST /v1/canvases/:id/events
+```
+
+`GET` lists the dynamic canvas's log events. `POST` appends one `CanvasLogEvent` (see [lifecycle.mdx#canvas-log-events](./lifecycle.mdx#canvas-log-events)) and returns the resulting canvas.
+
+```http
+GET  /v1/canvases/:id/snapshots
+POST /v1/canvases/:id/snapshots
+GET  /v1/canvases/:id/snapshots/:sid
+POST /v1/canvases/:id/snapshots/:sid/restore
+```
+
+`POST .../snapshots` body: `{ reason?, source?, label?, sourceEventId?, sourceEditId? }`. Returns `201 CanvasSnapshot`.
+
+`POST .../snapshots/:sid/restore` returns `200 { canvas, snapshot, checkpoint }`.
+
+```http
+GET  /v1/canvases/:id/export
+```
+
+Returns `200 CanvasBundle` (see [Bundles](#bundles)).
+
+```http
+GET  /v1/canvases/:id/feedback
+POST /v1/canvases/:id/feedback
+```
+
+`POST` body: `Partial<Feedback>` with `decision` (one of `accepted` | `needs_changes` | `comment_only`), optional `text`, `voiceTranscript`, `inkAssetId`, `targetBlockIds`, `targetAnchors`. The HUB stores feedback and, if a callback target is configured, enqueues a `FeedbackDelivery`. Returns `201` if no target, `202` if a delivery was enqueued.
+
+```http
+GET  /v1/canvases/:id/edits
+POST /v1/canvases/:id/edits
+```
+
+`POST` body: `{ canvasId, expectedVersion, ops, submittedBy?, note? }`. Returns `201 CanvasEdit` or `409 conflict` if `expectedVersion` does not match. See [lifecycle.mdx#canvas-edits](./lifecycle.mdx#canvas-edits).
+
+### Agent runs
+
+```http
+POST /v1/agent-runs
+GET  /v1/agent-runs?provider=&agentId=&status=
+GET  /v1/agent-runs/:id
+POST /v1/agent-runs/:id/feedback
+```
+
+`POST /v1/agent-runs` body: `Partial<AgentRun>`. The HUB upserts by id and emits `agent.run.created` or `agent.run.updated`. See [agent-runs.mdx](./agent-runs.mdx).
+
+`POST /v1/agent-runs/:id/feedback` accepts feedback that targets the run's `feedbackTarget` even when no canvas callback is configured.
+
+### Agent events
+
+```http
+POST /v1/agent-events
+POST /v1/agent-events/evaluate
+```
+
+`POST /v1/agent-events` records an `AgentEvent` (provider, agentRunId, type, status, sequence, payload, traceUrl, occurredAt). The HUB updates the parent agent run's `status` and `lastEventId` if the event carries them. Returns `201 AgentEvent`.
+
+`POST /v1/agent-events/evaluate` records the event AND runs the observer (see [agent-runs.mdx#observer](./agent-runs.mdx#observer)). Returns `201 { event, created, decision }`.
+
+### Feedback deliveries
+
+```http
+GET  /v1/feedback-deliveries?status=&canvasId=&feedbackId=
+GET  /v1/feedback-deliveries/:id
+POST /v1/feedback-deliveries/:id/retry
+```
+
+`POST .../retry` re‑enqueues a delivery. Returns `202 FeedbackDelivery`.
+
+### Assets
+
+```http
+POST /v1/assets
+POST /v1/assets/:id
+GET  /v1/assets/:id
+```
+
+`POST /v1/assets` (or `POST /v1/assets/:id`) accepts a raw body with the asset's `Content-Type`. Returns `201 { assetId, id, contentType, size, url, createdAt }`.
+
+`GET /v1/assets/:id` returns the raw asset body with the original `Content-Type` and `Content-Length`.
+
+### Live events
+
+```http
+GET  /v1/events
+```
+
+Returns an SSE stream of HubEvents scoped to the caller's workspace. See [live-events.mdx](./live-events.mdx) for the framing and reconnect semantics.
+
+### Viewer links
+
+```http
+POST /v1/viewer-links/preflight
+POST /v1/viewer-links
+POST /v1/viewer-links/:id/self-test
+POST /v1/viewer-links/:id/revoke
+POST /v1/viewer-links/:id/exchange    [public — no auth]
+```
+
+`POST /v1/viewer-links/preflight` body: `ViewerLinkRequest`. Returns `200 { status: "ready", checks, ... }` or `422 { status: "blocked", checks, ... }`.
+
+`POST /v1/viewer-links` runs the preflight then creates the link. Returns `201 ViewerLinkCreateResponse { id, kind, scope, canvasId, capabilities, code, url, expiresAt? }`.
+
+`POST /v1/viewer-links/:id/exchange` body: `{ code?: "<id>.<secret>", secret?: "<secret>" }`. Returns `200 ViewerLinkExchangeResponse { linkId, kind, scope, canvasId, capabilities, sessionToken, expiresAt, canvas }`. **No bearer token required.**
+
+`POST /v1/viewer-links/:id/self-test` is the internal equivalent of preflight against an already‑issued link.
+
+`POST /v1/viewer-links/:id/revoke` marks the link revoked. Subsequent exchanges return `404`.
+
+## Bundles {#bundles}
+
+A `CanvasBundle` is a self‑contained export shaped:
+
+```json
+{
+  "schemaVersion": "knify.canvas.v0.1",
+  "exportedAt": "2026-05-12T00:00:00Z",
+  "canvas": { ... Canvas ... },
+  "snapshots": [ ... ],
+  "events":    [ ... ],
+  "feedback":  [ ... ],
+  "edits":     [ ... ],
+  "assets":    [ { "asset": { ... }, "bodyBase64": "..." } ],
+  "agentRuns": [ ... ]
+}
+```
+
+A HUB that supports import MUST round‑trip a bundle through `POST /v1/canvases/import` and `GET /v1/canvases/:id/export` without loss. The `conflictPolicy` controls behavior when the canvas id already exists; `replace` snapshots the existing canvas first.
+
+## Viewer‑scoped routes
+
+When the bearer token is a viewer session (see [auth.mdx#viewer-links](./auth.mdx#viewer-links)), the HUB MUST scope routes to the bound canvas:
+
+| Route | Capability required |
+|---|---|
+| `GET /v1/canvases` | `canvas.read` (returns exactly the bound canvas) |
+| `GET /v1/canvases/:id` | `canvas.read`, where `:id` matches the bound canvas |
+| `POST /v1/canvases/:id/feedback` | `feedback.submit` |
+| `GET /v1/events` | `canvas.live` |
+| `GET /v1/assets/:id` | `asset.read`, and the asset MUST be referenced by the bound canvas |
+
+Any other route MUST return `403 forbidden`.
+
+## Hub event types
+
+The events surfaced on `GET /v1/events` carry `type` strings drawn from:
+
+```text
+canvas.created
+canvas.updated
+canvas.imported
+canvas.restored
+canvas.event.created
+canvas.snapshot.created
+canvas.edit.submitted
+feedback.created
+feedback.delivery.queued
+feedback.delivery.retrying
+feedback.delivered
+feedback.dead_lettered
+feedback.failed
+agent.run.created
+agent.run.updated
+agent.event.created
+agent.observer.decision
+```
+
+A VIEWER MUST tolerate unknown event types (forward compatibility — new MINOR bumps may add types).
+
+## Example: publish a static canvas
+
+```bash
+curl -X POST https://hub.example.com/v1/canvases \
+  -H "Authorization: Bearer $AGENTCANVAS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "canv_123",
+    "agentId": "agent:openclaw",
+    "runId": "run_2026_05_12_001",
+    "title": "Pixel Attribution Audit",
+    "summary": "Found 317 misfires across 18 422 events.",
+    "status": "ready_for_review",
+    "priority": "normal",
+    "version": 1,
+    "blocks": [
+      { "id": "summary",    "kind": "markdown", "markdown": "The audit found several pixel drift issues." },
+      { "id": "evidence",   "kind": "terminal", "command": "make audit", "output": "ok" }
+    ]
+  }'
+```
+
+The HUB returns `201 Canvas`.
+
+## Example: subscribe to events
+
+```bash
+curl -N https://hub.example.com/v1/events \
+  -H "Authorization: Bearer $AGENTCANVAS_TOKEN" \
+  -H "Last-Event-ID: evt_456"
+```
+
+See [live-events.mdx](./live-events.mdx) for the framing.
+
+## Example: viewer link flow
+
+```bash
+# 1) Preflight
+curl -X POST https://hub.example.com/v1/viewer-links/preflight \
+  -H "Authorization: Bearer $WORKSPACE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "canvasId":"canv_123", "kind":"share", "capabilities":["canvas.read","canvas.live"] }'
+
+# 2) Create
+curl -X POST https://hub.example.com/v1/viewer-links \
+  -H "Authorization: Bearer $WORKSPACE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "canvasId":"canv_123", "kind":"share", "capabilities":["canvas.read","canvas.live"], "ttlSeconds": 3600 }'
+# → { "id":"viewer-link_…", "code":"viewer-link_…","…", "url":"https://knify.link/c/…" }
+
+# 3) Exchange (on the recipient device, no auth header)
+curl -X POST https://hub.example.com/v1/viewer-links/viewer-link_xyz/exchange \
+  -H "Content-Type: application/json" \
+  -d '{ "code":"viewer-link_xyz.secret_abc" }'
+# → { "sessionToken":"viewer-session_…", "expiresAt":"…", "canvas": { … } }
+```

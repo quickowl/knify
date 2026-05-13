@@ -1,0 +1,60 @@
+---
+title: "Block kinds"
+description: "The canonical block taxonomy and how viewers MUST handle unknown kinds."
+---
+
+A canvas is a list of typed `blocks`. Each block has a stable `id`, a `kind` from the closed set below, and a set of kind‑specific fields. A VIEWER MUST render every kind it claims to support and MUST render a fallback for kinds it does not (see [Fallback](#fallback)).
+
+The source of truth for the field set on every block is the `Block` interface in [apps/hub/src/types.ts](../../apps/hub/src/types.ts).
+
+## Common fields
+
+Every block carries:
+
+- `id` (string, **required**) — stable across edits; survives patches; URLs anchor on it.
+- `kind` (string, **required**) — one of the kinds below, or a vendor extension shaped `vendor.kind` (see [conformance.mdx#extension-namespaces](./conformance.mdx#extension-namespaces)).
+- `title` (string, optional)
+- `metadata` (object, optional) — extension data; viewers MUST ignore unknown keys.
+
+## Kinds
+
+| Kind | Purpose | Notable fields |
+|---|---|---|
+| `heading` | Section heading | `text`, `level` (1–6) |
+| `markdown` | Prose / mixed content | `markdown` |
+| `image` | Image asset | `assetId` OR `url`, `alt`, `caption` |
+| `terminal` | A command and its output | `command`, `output`, `exitCode`, `language` |
+| `diff` | Unified diff | `diff` (string of the diff body), `language` |
+| `chart` | Data visualization | `chart: ChartSpec` (type, axes, series) |
+| `checklist` | Items that can be checked off | `items: ChecklistItem[]` |
+| `decision` | A prompt for a human to pick from options | `prompt`, `options` |
+| `link` | External or internal URL card | `url`, `title`, `caption`, `thumbnailUrl`, `thumbnailAssetId` |
+| `metadata` | A small grid of key/value rows | `metadata` map |
+| `video` | Embedded video | `assetId` OR `url`, `platform`, `duration`, `thumbnailUrl`, `thumbnailAssetId`, `posterAlt` |
+| `collection` | A list of mixed items | `items: ChecklistItem[]` (used as item rows), `pageSize` |
+| `form` | A small input form | `fields: FormField[]` |
+| `orderable-list` | A list with drag‑to‑reorder | `orderableItems: OrderableItem[]`, optional `itemEditor: FormSchema`, optional `total` |
+| `split` | Weighted split into named slices | `slices: SplitSlice[]` |
+| `rule-builder` | A typed rule builder | `ruleSchema: RuleSchema`, `clauses: RuleClause[]` |
+
+The full per‑kind field set (e.g. `ChartSpec.series[].data[]`, `FormField.type`) is normative and lives in [apps/hub/src/types.ts](../../apps/hub/src/types.ts). A future MINOR bump MAY add new kinds; viewers MUST forward‑compatibly fall back to a labeled placeholder.
+
+## Fallback {#fallback}
+
+When a VIEWER encounters a `block.kind` it does not support, it MUST:
+
+- Render a visually distinct placeholder that includes the `kind` value and the block `id`.
+- Preserve the block in the document model so that round‑trips do not drop it.
+- Not block the rest of the canvas from rendering.
+
+The reference web viewer renders such blocks as a `<UnknownBlock>` card with the kind label visible.
+
+## Edit ops and block kinds
+
+`POST /v1/canvases/:id/edits` (see [lifecycle.mdx#canvas-edits](./lifecycle.mdx#canvas-edits)) carries ops that target specific block kinds. The HUB MUST validate kind/op compatibility via `opRequiresBlockKind`. A consumer that authors edits MUST consult [apps/hub/src/validation.ts](../../apps/hub/src/validation.ts) for the current op→kind mapping; a future MINOR bump SHOULD lift that mapping into this document.
+
+## Assets
+
+Blocks that reference assets do so by `assetId`. The HUB MUST validate that any viewer session with `asset.read` can only fetch assets referenced by its bound canvas (see [auth.mdx#viewer-links](./auth.mdx#viewer-links)).
+
+A canvas MAY embed asset bodies inline by base64 only inside an exported `CanvasBundle` (`bundle.assets[].bodyBase64`). Top‑level canvases delivered through `GET /v1/canvases/:id` MUST reference assets by id, never by inline body.

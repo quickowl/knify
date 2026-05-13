@@ -1,0 +1,73 @@
+---
+title: "Error model"
+description: "Error envelope, status codes, and the catalog of error codes."
+---
+
+A conforming HUB MUST return errors in a single, stable envelope so that agents and viewers can react to failure without parsing prose.
+
+## Envelope
+
+Every non‑2xx response MUST have `Content-Type: application/json` and a body shaped:
+
+```json
+{
+  "error": "human-readable message",
+  "code": "machine_code",
+  "details": { "any": "structured context" }
+}
+```
+
+- `error` (string, **required**) — a human‑readable message safe to surface in UIs.
+- `code` (string, recommended) — a stable machine identifier from the [Error codes](#error-codes) table. Older Hub responses MAY omit `code`; clients MUST tolerate that and fall back to the HTTP status.
+- `details` (object, optional) — structured context (e.g. preflight check list, validation field name).
+
+The reference Hub's helper is `errorResponse(error)` in [apps/hub/src/utils.ts](../../apps/hub/src/utils.ts) (see usage in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+
+## HTTP status mapping
+
+| Status | Meaning | Typical `code` |
+|---|---|---|
+| `400 Bad Request` | The request body or query is malformed, has unknown fields, or fails validation | `bad_request` |
+| `401 Unauthorized` | The bearer token is missing, malformed, or rejected by the verifier | `unauthorized` |
+| `403 Forbidden` | The credential is valid but does not grant access to this workspace, canvas, or capability | `forbidden` |
+| `404 Not Found` | The resource does not exist, or the credential does not allow disclosure that it exists | `not_found` |
+| `405 Method Not Allowed` | The path is valid but the verb is not | `method_not_allowed` |
+| `409 Conflict` | Optimistic concurrency check failed (canvas edits) | `conflict` |
+| `422 Unprocessable Entity` | A preflight (e.g. viewer link) found blocking issues; the body's `checks` array describes them | `preflight_blocked` |
+| `500 Internal Server Error` | Unhandled server error | `internal` |
+| `503 Service Unavailable` | A dependency (API key verifier, store) is unreachable | `unavailable` |
+
+A HUB MUST use these status codes consistently. A HUB MUST NOT return `200 OK` with an `error` body.
+
+## Error codes
+
+| Code | Status | Raised when |
+|---|---|---|
+| `bad_request` | 400 | Request body is invalid JSON, references an unknown field, has an invalid id, or fails schema validation. |
+| `unauthorized` | 401 | No bearer token, malformed token, expired viewer session, or API key verifier rejection. |
+| `forbidden` | 403 | Workspace mismatch, viewer session out of scope, or missing capability. |
+| `not_found` | 404 | Resource does not exist, viewer link is revoked or expired, or the secret is wrong (do **not** disclose which). |
+| `method_not_allowed` | 405 | Verb is not allowed for the path. |
+| `conflict` | 409 | `expectedVersion` on a canvas edit does not match the stored canvas version. |
+| `preflight_blocked` | 422 | A preflight (viewer link) failed at least one check. The `details.checks` array lists each failure. |
+| `internal` | 500 | Unhandled server error. The HUB MUST NOT leak internals in the `error` message. |
+| `unavailable` | 503 | An upstream verifier or store is unreachable. The client SHOULD retry with backoff. |
+
+## Validation errors
+
+A HUB MUST reject requests that include unknown top‑level fields on writes (the reference Hub uses an explicit allowlist for every endpoint; see `canvasKeys`, `agentRunKeys`, `agentEventKeys`, `feedbackKeys`, etc. in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). The error is `400 bad_request` with a message naming the unknown field.
+
+A HUB MUST validate every `id` field against the protocol's id rules (URL‑safe ASCII, length bounded; see `validateID` in [apps/hub/src/utils.ts](../../apps/hub/src/utils.ts)) and return `400 bad_request` on violation.
+
+## Retry guidance for clients
+
+- `401 unauthorized` — refresh credentials, do not retry the same token.
+- `403 forbidden` — do not retry; surface to the operator.
+- `404 not_found` — do not retry unless you have reason to believe the resource is being created.
+- `409 conflict` — refetch the canvas, rebase the edit on the new `version`, resubmit.
+- `422 preflight_blocked` — surface the `checks` array; fix the blocking issue and re‑preflight.
+- `5xx` — retry with exponential backoff. A HUB MUST be safe to call again with the same `Idempotency-Key` on writes that accept one.
+
+## CORS
+
+CORS rejections MUST also use the error envelope: a `403` with `error: "cors origin is not allowed"` is the reference behavior (see `handleCORS` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).

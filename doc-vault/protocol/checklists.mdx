@@ -1,0 +1,79 @@
+---
+title: "Implementer checklists"
+description: "Role-specific MUST / SHOULD lists for AGENT, HUB, and VIEWER implementations."
+---
+
+These checklists are a directed reading of the spec. Each item links to the normative section. An implementation that ticks every MUST in its role is conforming at the Core level.
+
+## AGENT checklist
+
+### MUST
+
+- [ ] Produce canvases that validate against [schema.mdx](./schema.mdx). Every block has a stable `id`. ([schema.mdx#stable-ids](./schema.mdx))
+- [ ] Stamp `schema_version` on every canvas; never write to an unsupported version. ([conformance.mdx#versioning](./conformance.mdx#versioning))
+- [ ] Use one of the three auth mechanisms in [auth.mdx](./auth.mdx) and surface auth failures as actionable errors using the codes in [errors.mdx](./errors.mdx).
+- [ ] Honour the canvas status transitions in [lifecycle.mdx#canvas-status](./lifecycle.mdx#canvas-status); promote to `ready_for_review` only when there is verification evidence (terminal, diff, image, or a checked checklist item).
+- [ ] For dynamic canvases, emit canvas log events in the order specified at [lifecycle.mdx#canvas-log-events](./lifecycle.mdx#canvas-log-events).
+- [ ] When receiving a feedback callback, verify HMAC (timestamp + body, secret from `authRef`) and reject replays by `Idempotency-Key`. ([auth.mdx#feedback-callback-signing](./auth.mdx#feedback-callback-signing))
+- [ ] Tolerate unknown event types and unknown `block.kind` round‑tripped through `metadata`. ([conformance.mdx#extension-points](./conformance.mdx#extension-points))
+
+### SHOULD
+
+- [ ] Emit `AgentEvent`s for major run milestones (`turn.started`, `turn.completed`, `tool.invoked`, etc.). The protocol does not enumerate types but the observer in [agent-runs.mdx#observer](./agent-runs.mdx#observer) uses them for nudges.
+- [ ] Treat `409 conflict` on `POST /v1/canvases/:id/edits` as a rebase: refetch, reapply, resubmit.
+- [ ] Re‑authenticate (refresh the bearer token) on `401 unauthorized` rather than retry.
+- [ ] Set `feedbackTarget.authRef` and configure the corresponding signing secret on the HUB.
+
+## HUB checklist
+
+### MUST
+
+- [ ] Expose every Core route in [hub-api.mdx#core](./hub-api.mdx#core) with the documented verbs.
+- [ ] Use the error envelope in [errors.mdx](./errors.mdx) for every non‑2xx response.
+- [ ] Reject unknown top‑level fields on writes (allowlist per endpoint).
+- [ ] Enforce optimistic concurrency on `POST /v1/canvases/:id/edits` via `expectedVersion`.
+- [ ] Authenticate every request via one of: internal bearer token, verified API key (workspace‑scoped), or viewer session. Return `401 unauthorized` otherwise. ([auth.mdx](./auth.mdx))
+- [ ] Scope every record by `workspaceId` for API‑key callers; never leak across workspaces.
+- [ ] Bind viewer sessions to a single canvas; reject requests for any other canvas with `403`. ([auth.mdx#viewer-links](./auth.mdx#viewer-links))
+- [ ] Hash viewer secrets at rest; never return them after creation.
+- [ ] Stream SSE on `GET /v1/events`. Respect `Last-Event-ID`. ([live-events.mdx](./live-events.mdx))
+- [ ] Implement feedback delivery retries with exponential backoff and dead‑letter at `maxAttempts`. ([lifecycle.mdx#reliability](./lifecycle.mdx#reliability))
+- [ ] Send `Idempotency-Key: <deliveryId>` on every outbound webhook attempt.
+- [ ] Sign outbound webhooks when `feedbackTarget.authRef` resolves to a secret. ([auth.mdx#feedback-callback-signing](./auth.mdx#feedback-callback-signing))
+- [ ] Snapshot a canvas on static overwrite, dynamic completion, manual snapshot, and pre‑restore. ([lifecycle.mdx#snapshots](./lifecycle.mdx#snapshots))
+- [ ] Return `503 unavailable` (not `401`) when an external auth verifier is unreachable.
+- [ ] CORS: scope to an explicit origin allowlist. ([auth.mdx#cors](./auth.mdx#security))
+
+### SHOULD
+
+- [ ] Round‑trip a `CanvasBundle` through `POST /v1/canvases/import` and `GET /v1/canvases/:id/export` without loss. ([hub-api.mdx#bundles](./hub-api.mdx#bundles))
+- [ ] Document supported `schema_version` values and the deprecation window. ([conformance.mdx#capability-declaration](./conformance.mdx#capability-declaration))
+- [ ] Persist agent events for at least one terminal status transition per run.
+- [ ] Surface the observer (when enabled) as `agent.observer.decision` events on the SSE stream. ([agent-runs.mdx#observer](./agent-runs.mdx#observer))
+
+## VIEWER (and API consumer) checklist
+
+### MUST
+
+- [ ] Exchange a viewer link `code` for a `sessionToken` at `POST /v1/viewer-links/:id/exchange` (no bearer token on that one endpoint). ([auth.mdx#viewer-links](./auth.mdx#viewer-links))
+- [ ] Treat the `sessionToken` as `Authorization: Bearer <token>` on all subsequent requests.
+- [ ] Read the canvas via `GET /v1/canvases/:id`; do NOT depend on any path outside the bound canvas — those return `403`.
+- [ ] Render every block kind in [blocks.mdx](./blocks.mdx) you claim to support.
+- [ ] Render a labeled fallback for unknown `block.kind`; preserve the block in the document model. ([blocks.mdx#fallback](./blocks.mdx#fallback))
+- [ ] Subscribe to `GET /v1/events` (when `canvas.live` is granted). Reconnect with `Last-Event-ID` after a transport break. ([live-events.mdx#reconnect](./live-events.mdx#reconnect))
+- [ ] Re‑exchange the link before `expiresAt` if you need to continue past session TTL.
+- [ ] Treat unknown event `type`s as forward‑compatible: ignore, do not crash. ([hub-api.mdx#hub-event-types](./hub-api.mdx#hub-event-types))
+
+### SHOULD
+
+- [ ] Apply canvas updates from the event stream rather than polling. Refetch the canvas only on reconnect with no `Last-Event-ID` (or after a long offline period).
+- [ ] When granted `feedback.submit`, surface a UI that POSTs feedback to `POST /v1/canvases/:id/feedback` with one of the three valid `decision` values.
+- [ ] Respect server‑set `Cache-Control: no-store` on viewer‑scoped responses.
+
+## API consumer checklist (machine reader of exports)
+
+API consumers are a subset of VIEWER. Additional rules:
+
+- [ ] Prefer reading named [exports](./exports-api.mdx) (e.g. `GET /v1/canvases/:id/exports/:name`) over scraping blocks.
+- [ ] Treat an export's `stable: true` flag as a contract — breaking changes require a `schema_version` MAJOR bump. ([exports-api.mdx](./exports-api.mdx))
+- [ ] Tolerate the addition of new exports at MINOR bumps; consume only the names you care about.

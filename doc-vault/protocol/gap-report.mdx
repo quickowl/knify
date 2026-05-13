@@ -1,0 +1,67 @@
+---
+title: "Gap report: Knify Canvas Protocol vs. OpenAI Symphony"
+description: "What an outside team needs that the Knify protocol does not yet supply, mapped against the structural elements of OpenAI's Symphony SPEC."
+---
+
+This report compares the Knify Canvas Protocol against OpenAI's Symphony SPEC (`openai/symphony` SPEC.md) on the dimensions that determine whether a third party can implement the protocol from the spec alone, without reading the reference implementation.
+
+Symphony and Knify solve different problems — Symphony is a coding‑agent daemon, Knify is a content protocol for typed‑block canvases — so we do not compare them on domain content. We compare them on the **shape of a spec that outsiders can implement to**: normative language, state machines, error model, conformance criteria.
+
+The protocol exposes three implementer roles:
+
+- **Agent (publisher)** — produces canvases and consumes feedback callbacks
+- **Hub (server)** — stores canvases, fans out events, delivers feedback
+- **Viewer / API consumer** — reads canvases, exports, and event streams
+
+The Knify protocol MUST be implementable independently by each of these roles.
+
+## Summary
+
+The protocol files at [doc-vault/protocol/](.) cover the canvas object shape, the patch‑event idea, and a sketch of an exports API. The wire contract that a real implementer needs — auth, errors, state machines, the live‑events transport, the feedback‑callback shape, the full route table, the block taxonomy — currently lives implicitly in [apps/hub/src/types.ts](../../apps/hub/src/types.ts) and [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+
+This report identifies 18 structural gaps. Eleven new spec files and four edits to existing files close them. See [Files added or modified](#files-added-or-modified).
+
+## Gap matrix
+
+| # | Element Symphony formalizes | Knify state before | Filed in |
+|---|---|---|---|
+| 1 | Problem statement + Goals & Non‑Goals | Marketing prose in [index.mdx](./index.mdx) | [index.mdx](./index.mdx) — rewritten with Goals / Non‑Goals / Three roles |
+| 2 | RFC 2119 keywords (MUST / SHOULD / MAY) | "should," "potential," "can" — non‑normative | [conformance.mdx](./conformance.mdx) and applied across all files |
+| 3 | Named domain model | Scattered in [types.ts](../../apps/hub/src/types.ts) | [schema.mdx](./schema.mdx), [blocks.mdx](./blocks.mdx), [agent-runs.mdx](./agent-runs.mdx) |
+| 4 | State machines | TS unions only | [lifecycle.mdx](./lifecycle.mdx) |
+| 5 | Formal API surface with verbs, paths, request/response, status codes | "Potential endpoints:" sketch in [exports-api.mdx](./exports-api.mdx) | [hub-api.mdx](./hub-api.mdx) |
+| 6 | Auth & identity model | Absent from spec; bearer tokens implicit in code | [auth.mdx](./auth.mdx) |
+| 7 | Error envelope + categorized codes | Absent | [errors.mdx](./errors.mdx) |
+| 8 | Failure, retry, reconciliation model | Absent | [lifecycle.mdx#reliability](./lifecycle.mdx#reliability) |
+| 9 | Agent‑runner protocol (events + callbacks) | TS types only | [agent-runs.mdx](./agent-runs.mdx) |
+| 10 | Live transport: channels, framing, reconnect | Shape only — no transport | [live-events.mdx](./live-events.mdx) — extended with SSE + `Last-Event-ID` |
+| 11 | Versioning policy + capability declaration | `schema_version` field with informal note | [conformance.mdx#versioning](./conformance.mdx#versioning) |
+| 12 | Extension points (unknown‑key tolerance, namespaces) | Absent | [conformance.mdx#extensions](./conformance.mdx#extensions) |
+| 13 | Reference algorithms (pseudocode) | Absent | [recipes.mdx](./recipes.mdx) |
+| 14 | Implementation checklist | Absent | [checklists.mdx](./checklists.mdx) |
+| 15 | Test / validation matrix | Absent | [conformance.mdx#conformance-tests](./conformance.mdx#conformance-tests) |
+| 16 | Security / trust boundaries | Absent | [auth.mdx#security](./auth.mdx#security) |
+| 17 | Block taxonomy | 17 kinds in [types.ts](../../apps/hub/src/types.ts) only | [blocks.mdx](./blocks.mdx) |
+| 18 | Worked examples (curl, callback bodies, event excerpts) | One canvas JSON, one patch | Embedded in [hub-api.mdx](./hub-api.mdx), [agent-runs.mdx](./agent-runs.mdx), [recipes.mdx](./recipes.mdx) |
+
+## Files added or modified
+
+**Added** (all under `doc-vault/protocol/`):
+
+- [gap-report.mdx](./gap-report.mdx) — this file
+- [conformance.mdx](./conformance.mdx) — RFC 2119, versioning, extensions, conformance tests
+- [auth.mdx](./auth.mdx) — auth & identity model, security posture
+- [errors.mdx](./errors.mdx) — error envelope + codes
+- [lifecycle.mdx](./lifecycle.mdx) — state machines + reliability
+- [hub-api.mdx](./hub-api.mdx) — full normative endpoint reference
+- [blocks.mdx](./blocks.mdx) — block kinds reference
+- [agent-runs.mdx](./agent-runs.mdx) — agent runs, agent events, feedback callbacks
+- [checklists.mdx](./checklists.mdx) — AGENT / HUB / VIEWER implementer checklists
+- [recipes.mdx](./recipes.mdx) — reference pseudocode for common flows
+
+**Modified**:
+
+- [index.mdx](./index.mdx) — Goals, Non‑Goals, Three implementer roles
+- [schema.mdx](./schema.mdx) — MUST/SHOULD language, link to blocks.mdx
+- [exports-api.mdx](./exports-api.mdx) — make endpoints normative, link to hub-api.mdx
+- [live-events.mdx](./live-events.mdx) — add SSE transport + `Last-Event-ID` reconnect

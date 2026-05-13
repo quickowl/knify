@@ -12,6 +12,8 @@ Create canvas snapshot
 -> stream updates to viewers and API subscribers
 ```
 
+The keywords MUST, MUST NOT, SHOULD, and MAY in this document follow [conformance.mdx](./conformance.mdx). The HUB event types this transport carries are listed in [hub-api.mdx#hub-event-types](./hub-api.mdx#hub-event-types). Canvas log events (dynamic‑canvas mutations) are specified in [lifecycle.mdx#canvas-log-events](./lifecycle.mdx#canvas-log-events).
+
 ## Patch event
 
 ```json
@@ -57,3 +59,58 @@ Event records should include:
 | Snapshot plus events | Live agent jobs and dashboards |
 | Event replay | Debugging, audit history, and version reconstruction |
 | Subscription | Viewer and API consumers receive updates |
+
+## Transport: Server‑Sent Events
+
+A HUB MUST expose live updates over Server‑Sent Events at:
+
+```http
+GET /v1/events
+Authorization: Bearer <token>
+Accept: text/event-stream
+```
+
+The bearer token MAY be an internal token, a workspace API key, or a viewer session token. The HUB MUST scope the stream:
+
+- Internal token → all workspaces.
+- API key → events whose `workspaceId` matches the verified workspace.
+- Viewer session → events for the bound `canvasId`. The viewer session MUST hold the `canvas.live` capability or the HUB MUST return `403 forbidden`. See [auth.mdx#viewer-links](./auth.mdx#viewer-links).
+
+### Framing
+
+Each event uses the SSE wire format:
+
+```text
+id: evt_456
+event: canvas.updated
+data: {"type":"canvas.updated","canvasId":"canv_123","data":{...Canvas...},"createdAt":"2026-05-12T12:34:56Z"}
+
+```
+
+- `id` is the server‑assigned event id. Clients MUST remember the last `id` they processed.
+- `event` is the [HUB event type](./hub-api.mdx#hub-event-types).
+- `data` is JSON. For `canvas.updated`, it is a full `Canvas`. For `canvas.event.created`, it is a `CanvasLogEvent`. For `feedback.*`, it is a `FeedbackDelivery` or `Feedback`. Other types carry their own payload shape; consult [agent-runs.mdx](./agent-runs.mdx) for `agent.observer.decision`.
+
+### Reconnect {#reconnect}
+
+A VIEWER MUST reconnect using the standard `Last-Event-ID` header:
+
+```http
+GET /v1/events
+Authorization: Bearer <token>
+Last-Event-ID: evt_456
+```
+
+The HUB MUST replay events after that id, in order, before resuming live tailing. If the HUB cannot honour `Last-Event-ID` (e.g. the id is too old to replay), it MUST start the stream live without raising an error; the VIEWER SHOULD then refetch any canvas it cares about via `GET /v1/canvases/:id` to recover any state it missed.
+
+### Heartbeats
+
+A HUB SHOULD emit SSE comments (`: keepalive`) at least every 30 seconds so that intermediaries do not idle‑close the stream. Clients MUST treat comments as no‑ops.
+
+## Permission scope of events
+
+A viewer session MUST only receive events for its bound canvas. The HUB MUST filter the stream server‑side and MUST NOT rely on client filtering.
+
+## Patch payload semantics
+
+The `patch` body in this document is the legacy JSON‑Patch form. The reference HUB does not yet expose JSON‑Patch on the wire; instead, dynamic canvases are mutated via the canvas log event types in [lifecycle.mdx#canvas-log-events](./lifecycle.mdx#canvas-log-events). A future MINOR bump MAY add a JSON‑Patch path for fine‑grained edits. Until then, treat the JSON‑Patch example above as a description of *what* the log events do, not *how* the wire frames them.

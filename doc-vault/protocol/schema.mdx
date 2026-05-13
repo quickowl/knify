@@ -3,7 +3,9 @@ title: "Canvas schema"
 description: "The minimum useful shape for a Knify canvas."
 ---
 
-The canvas schema should not be only a visual tree. It needs blocks for humans and exports for machines.
+The canvas schema is the wire shape every AGENT produces and every HUB persists. It carries blocks for humans (see [blocks.mdx](./blocks.mdx)) and exports for machines (see [exports-api.mdx](./exports-api.mdx)).
+
+The keywords MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY in this document follow [conformance.mdx](./conformance.mdx).
 
 ## Minimum object shape
 
@@ -86,10 +88,25 @@ The canvas schema should not be only a visual tree. It needs blocks for humans a
 }
 ```
 
+## Required fields
+
+A canvas MUST carry:
+
+- `schema_version` — the protocol identifier; see [conformance.mdx#protocol-identifier-and-versioning](./conformance.mdx#protocol-identifier-and-versioning).
+- `canvas_id` — server‑validated id (the reference HUB uses `validateID`).
+- `title` — non‑empty.
+- `kind` — agent‑defined free‑form label (`report`, `analysis`, etc.); the HUB does not interpret it.
+- `status` — one of the canvas statuses in [lifecycle.mdx#canvas-status](./lifecycle.mdx#canvas-status).
+- `blocks` — array of blocks; every block has a stable `id` and a `kind` from [blocks.mdx](./blocks.mdx).
+
+The `version` field is a monotonically increasing integer maintained by the HUB. Edits MUST supply `expectedVersion`; the HUB MUST reject mismatches with `409 conflict` (see [errors.mdx](./errors.mdx), [lifecycle.mdx#canvas-edits](./lifecycle.mdx#canvas-edits)).
+
+`exports` and `actions` are optional; when present, they MUST follow [exports-api.mdx](./exports-api.mdx).
+
 ## Versioning rule
 
-Treat `schema_version` as a compatibility contract. Old viewers should fail gracefully and render fallback blocks where possible.
+`schema_version` is a compatibility contract. A VIEWER MUST render a labeled fallback for an unknown `block.kind` (see [blocks.mdx#fallback](./blocks.mdx#fallback)) and SHOULD render a fallback for an unknown MINOR `schema_version` within the same MAJOR. Breaking schema changes require a MAJOR bump.
 
 ## Stable IDs
 
-Every block that can be referenced, patched, exported, or linked should have a stable `id`.
+Every block that can be referenced, patched, exported, or linked MUST have a stable `id`. The HUB validates ids (URL‑safe ASCII, bounded length) and returns `400 bad_request` on violation.

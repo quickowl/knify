@@ -1,0 +1,137 @@
+---
+title: "Lifecycles & reliability"
+description: "State machines for canvases and agent runs, and the rules a Hub follows for retries and reconciliation."
+---
+
+This document defines the state machines a conforming HUB MUST honour, and the reliability rules for feedback delivery and event streaming.
+
+## Canvas status {#canvas-status}
+
+A canvas has a `status` taken from this closed set:
+
+| Status | Meaning |
+|---|---|
+| `draft` | Created but not yet meaningful to a reviewer. |
+| `in_progress` | The agent is actively working. |
+| `ready_for_review` | The agent believes the canvas is ready for a human or downstream consumer to assess. |
+| `accepted` | The reviewer accepted the canvas. Terminal. |
+| `needs_changes` | The reviewer asked for changes. The agent SHOULD re‑enter `in_progress` and resubmit. |
+| `archived` | Hidden from default listings. Terminal. |
+
+```text
+            ┌──────────────────────────────┐
+            │                              │
+            ▼                              │
+draft ──► in_progress ──► ready_for_review ┴──► accepted
+            ▲                  │                   │
+            │                  ▼                   ▼
+            └────────── needs_changes          archived
+```
+
+A HUB MUST allow producers to set any status on `POST /v1/canvases`. A HUB SHOULD NOT enforce the transitions above on writes (the producer is the authority on status) but MAY emit `agent.observer.decision` events that flag suspicious transitions (see [agent-runs.mdx#observer](./agent-runs.mdx#observer)). The reference Hub's observer flags a `ready_for_review` canvas that lacks verification evidence (a terminal output, diff, image, or checked checklist item).
+
+The mode of a canvas is independent of status:
+
+- `static` — published once; future writes are full overwrites that take a snapshot of the previous state.
+- `dynamic` — accepts a stream of canvas log events that mutate it in place. See [live-events.mdx](./live-events.mdx) and [Canvas log events](#canvas-log-events).
+
+## Canvas log events {#canvas-log-events}
+
+Dynamic canvases progress through these event types (`CanvasLogEventType` in [apps/hub/src/types.ts](../../apps/hub/src/types.ts)):
+
+| Type | Effect |
+|---|---|
+| `canvas.started` | Creates a dynamic canvas if it does not exist; sets `title`, `summary`, `status`. |
+| `canvas.summary.updated` | Mutates `title`, `summary`, `priority`, or `status`. |
+| `canvas.block.appended` | Appends a new block (or inserts after `insertAfterBlockId`). |
+| `canvas.block.replaced` | Replaces a block in place by `block.id`. |
+| `canvas.block.removed` | Removes a block by `blockId`. |
+| `canvas.completed` | Marks the canvas as finished. Triggers a snapshot (`SNAPSHOT_DYNAMIC_COMPLETE`). |
+
+A HUB MUST accept these events idempotently — a producer that retries an event with the same `id` MUST observe the same canvas state. The reference Hub deduplicates by event id in `applyCanvasLogEvent`.
+
+A producer MAY supply `expectedVersion` on a log event. If present, the HUB MUST reject the event with `409 conflict` when the stored canvas version does not match.
+
+## Canvas edits
+
+Canvases admit edits from non‑producer actors (e.g. a viewer with `feedback.submit` plus future edit capabilities) via `POST /v1/canvases/:id/edits`. Edits carry an `expectedVersion` and a list of `ops`. The HUB MUST:
+
+- Reject with `409 conflict` if `expectedVersion` does not match the stored canvas `version`.
+- Validate that every op references a block id that exists in the current canvas.
+- Validate that every op whose `op` requires a specific block kind matches the kind of the referenced block (see `opRequiresBlockKind` in [apps/hub/src/validation.ts](../../apps/hub/src/validation.ts)).
+
+The HUB stores the edit and emits `canvas.edit.submitted`. Applying the edit to the canvas state is currently the producing agent's responsibility — the HUB stores the proposal.
+
+## Snapshots
+
+A HUB MUST snapshot a canvas when:
+
+- A `static` canvas is overwritten by a new `POST /v1/canvases` with the same id (`SNAPSHOT_STATIC_OVERWRITE`).
+- A `dynamic` canvas receives a `canvas.completed` log event (`SNAPSHOT_DYNAMIC_COMPLETE`).
+- A caller invokes `POST /v1/canvases/:id/snapshots` (`SNAPSHOT_MANUAL`).
+- A caller restores from a snapshot — the pre‑restore state is snapshotted as a checkpoint.
+
+Snapshots are addressable at `GET /v1/canvases/:id/snapshots/:sid`. Restore at `POST /v1/canvases/:id/snapshots/:sid/restore` returns the new canvas, the source snapshot, and the checkpoint.
+
+## Agent run status
+
+An agent run (see [agent-runs.mdx](./agent-runs.mdx)) has a `status` taken from this closed set (`AgentRunStatus` in [apps/hub/src/types.ts](../../apps/hub/src/types.ts)):
+
+| Status | Meaning |
+|---|---|
+| `registered` | The run is known but not started. |
+| `running` | The agent is producing work. |
+| `waiting_for_feedback` | The agent has surfaced a canvas and is awaiting a reviewer decision. |
+| `completed` | The run finished successfully. Terminal. |
+| `failed` | The run finished with an error. Terminal. |
+| `expired` | The run is too old to be acted on. Terminal. |
+
+```text
+registered ──► running ──► waiting_for_feedback ──► completed
+                  │              │                       │
+                  └─────► failed │                       │
+                                 └─────► expired ───────┘
+```
+
+A HUB MUST update `agent_run.status` from agent‑event `status` fields when an event carries one (see `recordAgentEvent` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). The HUB emits `agent.run.updated` on every status change.
+
+## Feedback delivery {#reliability}
+
+When feedback is created on a canvas that has a callback target, the HUB enqueues a `FeedbackDelivery` and attempts delivery. Statuses (`DeliveryStatus`):
+
+| Status | Meaning |
+|---|---|
+| `pending` | Created but not yet queued for an attempt. |
+| `queued` | Ready for the next attempt. |
+| `retrying` | A previous attempt failed; another is scheduled. |
+| `delivered` | The target accepted the delivery. Terminal. |
+| `failed` | Terminal failure (currently only reported on the parent `Feedback` after dead‑letter). |
+| `dead_lettered` | All attempts exhausted. Terminal. |
+
+### Retry policy
+
+A HUB MUST implement exponential backoff with a per‑target cap. The reference Hub uses:
+
+```text
+nextAttemptAt = now + min(2 ** (attempts - 1), 30) seconds
+```
+
+and defaults `maxAttempts` to 1 for `webhook` providers and 3 for other providers, overridable by `target.metadata.maxAttempts`. See `processDelivery` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+
+When `attempts >= maxAttempts` the delivery becomes `dead_lettered`, the parent `Feedback.deliveryStatus` becomes `failed`, and the HUB emits both `feedback.dead_lettered` and `feedback.failed`.
+
+### Idempotency
+
+The HUB MUST send `Idempotency-Key: <deliveryId>` on every outbound webhook attempt. Receivers MUST deduplicate by this key.
+
+### Provider edge‑deliverability
+
+Only `webhook`, `generic_cloud`, and `cursor` are deliverable directly from the HUB (see `edgeDeliverable` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). Other providers (`cursor_cli`, `codex`, `codex_exec`, `claude`, `claude_cli`) require a local sidecar that polls feedback deliveries — see [agent-runs.mdx#sidecar](./agent-runs.mdx#sidecar).
+
+## Event ordering and replay
+
+A HUB MUST assign a server‑side `id` and `createdAt` to every event it publishes. SSE consumers reconnect with `Last-Event-ID` (see [live-events.mdx](./live-events.mdx#reconnect)) and the HUB MUST replay events after that id in order.
+
+## Reconciliation
+
+A HUB SHOULD periodically reconcile pending feedback deliveries that were started but not finished (e.g. after a process restart). The reference Hub does this on demand by re‑enqueueing via `POST /v1/feedback-deliveries/:id/retry`. A future MINOR bump MAY add a reconciler endpoint or background sweep.

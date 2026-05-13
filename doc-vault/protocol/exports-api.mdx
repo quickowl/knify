@@ -3,15 +3,17 @@ title: "Exports as API"
 description: "How canvases expose stable machine-consumable values."
 ---
 
-Canvas exports make agent work machine-consumable.
+Canvas exports make agent work machine‑consumable.
 
-Agents often live in shells, filesystems, browser sessions, repos, tool environments, and chat threads. The canvas gives them a structured output surface.
+Agents often live in shells, filesystems, browser sessions, repos, tool environments, and chat threads. The canvas gives them a structured output surface that downstream automation can consume by name.
+
+The keywords MUST, MUST NOT, SHOULD, and MAY in this document follow [conformance.mdx](./conformance.mdx).
 
 ## Principle
 
 Blocks are for humans. Exports are for machines.
 
-API consumers should read named exports instead of scraping visual blocks.
+API consumers MUST prefer named exports over scraping visual blocks. Exports are the stable contract; block props MAY be reformatted across MINOR bumps.
 
 ## Export declaration
 
@@ -26,20 +28,20 @@ API consumers should read named exports instead of scraping visual blocks.
 
 ## API surface
 
-Potential endpoints:
+The normative routes are documented in [hub-api.mdx](./hub-api.mdx). The export‑facing subset is:
 
 ```text
-GET /canvases/:id
-GET /canvases/:id/blocks/:block_id
-GET /canvases/:id/exports/:name
-PATCH /canvases/:id
-SUBSCRIBE /canvases/:id/events
-POST /canvases/:id/fork
+GET  /v1/canvases/:id                       # full canvas (consumers should prefer named exports)
+GET  /v1/canvases/:id/exports/:name         # the value at the export's path (planned MINOR addition; see below)
+GET  /v1/events                             # SSE stream of HubEvents (see live-events.mdx)
+POST /v1/viewer-links                       # mint a read-only or feedback-capable link
 ```
+
+The dedicated `GET /v1/canvases/:id/exports/:name` route is a planned MINOR addition. Until it ships, API consumers MUST read `GET /v1/canvases/:id` and resolve the export by following its `path` into `data` locally. The `stable: true` flag on an export is a contract that the export name and JSON Pointer path will be preserved across MINOR bumps.
 
 ## Contract rules
 
-- Export names should be stable across versions.
-- Export paths should point into `data`, not visual-only props.
-- Breaking export changes require a schema or canvas contract version bump.
-- Permissions should allow API links to read exports without granting viewer or update rights.
+- Export names MUST be stable within a MAJOR `schema_version`. Removing or renaming a stable export requires a MAJOR bump ([conformance.mdx#versioning](./conformance.mdx#versioning)).
+- Export `path` values MUST point into `data`, not into visual‑only block props.
+- Permissions MUST allow API consumers to read exports without granting viewer write or feedback rights. Use a viewer link with capability `canvas.read` (see [auth.mdx#viewer-links](./auth.mdx#viewer-links)).
+- A consumer MUST tolerate the addition of new exports at MINOR bumps; consume only the names you care about.
