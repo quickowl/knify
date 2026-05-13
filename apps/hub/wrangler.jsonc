@@ -2,18 +2,25 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "knify-agentcanvas-hub",
   "main": "src/index.ts",
+  "account_id": "6c9173597dd654f0f82c2506ade66c9b",
   "compatibility_date": "2026-04-01",
   "workers_dev": true,
   "preview_urls": true,
   "vars": {
     "AGENTCANVAS_LINK_BASE_URL": "https://knify.link",
-    "AGENTCANVAS_CORS_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178,http://localhost:5179,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,http://127.0.0.1:5176,http://127.0.0.1:5177,http://127.0.0.1:5178,http://127.0.0.1:5179,http://localhost:4173,http://127.0.0.1:4173,https://knify.dev,https://knify.link"
+    "AGENTCANVAS_CORS_ORIGINS": "http://localhost:5173,http://localhost:5174,http://localhost:5175,http://localhost:5176,http://localhost:5177,http://localhost:5178,http://localhost:5179,http://127.0.0.1:5173,http://127.0.0.1:5174,http://127.0.0.1:5175,http://127.0.0.1:5176,http://127.0.0.1:5177,http://127.0.0.1:5178,http://127.0.0.1:5179,http://localhost:4173,http://127.0.0.1:4173,https://knify.dev,https://hub.knify.dev,https://knify.link"
   },
+  "routes": [
+    {
+      "pattern": "hub.knify.dev",
+      "custom_domain": true
+    }
+  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "knify_agentcanvas_hub",
-      "database_id": "00000000-0000-0000-0000-000000000000"
+      "database_id": "41e6039c-cbd0-45d6-8172-4efd0dfd476d"
     }
   ],
   "r2_buckets": [

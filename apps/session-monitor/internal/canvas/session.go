@@ -174,4 +174,3 @@ func sessionMarkdown(session types.LocalSession, now time.Time) string {
 	}
 	return core.Truncate(b.String(), sessionMarkdownCap)
 }
-
