@@ -1,0 +1,50 @@
+title = "knify canvases gitleaks config"
+
+# Keep all of the upstream gitleaks rules (AWS keys, GitHub tokens, private
+# keys, generic high-entropy secrets, etc). The rules below are *additional*
+# project-specific patterns that catch machine/identity-specific values which
+# the default ruleset does not flag.
+[extend]
+useDefault = true
+
+# Tailscale MagicDNS hostnames. ".ts.net" is public; specific tailnet names
+# leak machine identity and Tailscale fingerprints.
+[[rules]]
+id = "knify-tailscale-magicdns"
+description = "Tailscale MagicDNS hostname (machine.tailnet.ts.net)"
+regex = '''[A-Za-z0-9][A-Za-z0-9-]*\.[A-Za-z0-9-]+\.ts\.net'''
+tags = ["hostname", "tailscale"]
+
+# Apple default hostname pattern (e.g. "fireharp-macbook-pro", "alice-air").
+[[rules]]
+id = "knify-apple-default-hostname"
+description = "Default Apple hostname shape (someone's-macbook-pro / -air)"
+regex = '''(?i)\b[a-z][a-z0-9]+(?:-|s-)macbook(?:-pro|-air)?\b'''
+tags = ["hostname", "apple"]
+
+# Tunnel services that expose a developer's local machine to the public net.
+[[rules]]
+id = "knify-public-tunnels"
+description = "Public dev tunnel hostnames (ngrok, cloudflare, localtunnel, serveo)"
+regex = '''[A-Za-z0-9-]+\.(?:ngrok-free\.app|ngrok\.io|trycloudflare\.com|loca\.lt|serveo\.net|lhr\.life)'''
+tags = ["hostname", "tunnel"]
+
+# Private/link-local IPs embedded in URLs. Standalone "127.0.0.1" is fine in
+# code, but a URL pointing at a LAN address is almost always machine-specific.
+[[rules]]
+id = "knify-rfc1918-in-url"
+description = "URL pointing at an RFC1918 / link-local address"
+regex = '''https?://(?:10\.|192\.168\.|172\.(?:1[6-9]|2[0-9]|3[01])\.|169\.254\.)\d+(?:\.\d+){0,2}(?::\d+)?'''
+tags = ["network", "private-ip"]
+
+# Catch-all allowlist: documentation, examples, and the workflow file that
+# legitimately mentions these patterns by name. Add new exceptions sparingly.
+[allowlist]
+description = "Files allowed to mention machine-identity patterns"
+paths = [
+  '''\.gitleaks\.toml$''',
+  '''\.env\.example$''',
+  '''(^|/)(README|CHANGELOG|CONTRIBUTING)\.md$''',
+  '''^docs/''',
+  '''^apps/hub/scripts/start-local\.mjs$''',
+]

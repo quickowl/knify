@@ -10,3 +10,6 @@ __pycache__/
 apps/session-monitor/session-monitor
 session-monitor-live-watch.json
 session-monitor-result.json
+.env
+.env.*
+!.env.example

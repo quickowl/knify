@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+set -eu
+
+hook_dir=$(dirname "$0")
+
+# Local-only: reject staged changes that contain literal values from .env.
+"$hook_dir/check-env-leaks.sh"
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+  echo "gitleaks is required for this repository's pre-commit hook." >&2
+  echo "Install it with: brew install gitleaks" >&2
+  exit 1
+fi
+
+# Generic shape rules live in .gitleaks.toml at the repo root; gitleaks
+# auto-discovers it.
+exec gitleaks git --pre-commit --staged --redact --no-banner .
