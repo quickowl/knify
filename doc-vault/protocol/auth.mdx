@@ -9,14 +9,14 @@ The Knify Canvas Protocol defines three authentication mechanisms. Every authent
 
 ### Internal bearer token
 
-- A HUB MAY accept a single static bearer token configured out of band (the reference Hub reads `AGENTCANVAS_TOKEN`, `CANVAS_HUB_TOKEN`, or `HUB_TOKEN`; see [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+- A HUB MAY accept a single static bearer token configured out of band (the reference Hub reads `AGENTCANVAS_TOKEN`, `CANVAS_HUB_TOKEN`, or `HUB_TOKEN`; see [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)).
 - A request authenticated by the internal token has `internal = true` and is **not** scoped to a workspace — it sees all canvases. A HUB MUST treat this as a privileged credential.
 - This mechanism is intended for development, local agents, and trusted service‑to‑service traffic.
 
 ### API keys (Unkey)
 
 - A HUB MAY accept third‑party bearer tokens verified by an external API key service. The reference Hub uses [Unkey](https://www.unkey.com) (`AGENTCANVAS_UNKEY_ROOT_KEY`, `AGENTCANVAS_UNKEY_VERIFY_URL`).
-- The verifier MUST return a `workspaceId` for every valid key. The HUB MUST scope every subsequent request to that workspace. The reference Hub resolves the workspace id from `metadata.workspaceId`, `metadata.workspace_id`, `metadata.tenantId`, `metadata.tenant_id`, `metadata.orgId`, or `metadata.organizationId`, falling back to the key id (see `unkeyVerifier` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+- The verifier MUST return a `workspaceId` for every valid key. The HUB MUST scope every subsequent request to that workspace. The reference Hub resolves the workspace id from `metadata.workspaceId`, `metadata.workspace_id`, `metadata.tenantId`, `metadata.tenant_id`, `metadata.orgId`, or `metadata.organizationId`, falling back to the key id (see `unkeyVerifier` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)).
 - If the verifier is unreachable, a HUB MUST return `503 unavailable` (not 401), so callers know to retry.
 
 ### Viewer link sessions
@@ -42,7 +42,7 @@ The flow:
 2. The caller POSTs `POST /v1/viewer-links` and receives a viewer code shaped `<id>.<secret>` and a `url` of the form `https://knify.link/c/<id>.<secret>`.
 3. The recipient device POSTs the secret to `POST /v1/viewer-links/<id>/exchange` (no bearer token required — this endpoint is public).
 4. The HUB returns a `sessionToken` of the form `<sessionId>.<sessionSecret>` and an `expiresAt`. The session expires 12 hours after issue in the reference Hub.
-5. Subsequent requests carry `Authorization: Bearer <sessionToken>`. The HUB MUST enforce `scope = canvas` and the issued `capabilities` on every request — see `handleViewerSession` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+5. Subsequent requests carry `Authorization: Bearer <sessionToken>`. The HUB MUST enforce `scope = canvas` and the issued `capabilities` on every request — see `handleViewerSession` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts).
 
 A HUB MUST hash secrets at rest (the reference Hub uses SHA‑256; see `secretHash`). A HUB MUST NOT log or return the raw secret after creation.
 
@@ -67,7 +67,7 @@ A HUB MUST enforce these rules:
 - API key: access limited to records whose `workspaceId` matches the verified workspace.
 - Viewer session: access limited to the bound `canvasId` and the granted capabilities. Requests for any other canvas MUST return `403 forbidden`.
 
-The reference enforcement helper is `workspaceVisible(record.workspaceId, auth.workspaceId)` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts). A record is visible if the request is internal, or if the record has no workspace id (legacy), or if the workspace ids match.
+The reference enforcement helper is `workspaceVisible(record.workspaceId, auth.workspaceId)` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts). A record is visible if the request is internal, or if the record has no workspace id (legacy), or if the workspace ids match.
 
 ## Security {#security}
 
@@ -96,7 +96,7 @@ A HUB MUST scope CORS to an explicit allow‑list of origins (the reference Hub 
 
 A HUB MUST NOT log bearer tokens, viewer secrets, or signing keys.
 
-A HUB MUST validate that viewer secrets contain only URL‑safe characters (`[A-Za-z0-9_-]`) before any comparison or display (see `validateViewerSecret` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+A HUB MUST validate that viewer secrets contain only URL‑safe characters (`[A-Za-z0-9_-]`) before any comparison or display (see `validateViewerSecret` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)).
 
 ### Asset access
 

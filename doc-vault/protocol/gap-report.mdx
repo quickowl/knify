@@ -17,7 +17,7 @@ The Knify protocol MUST be implementable independently by each of these roles.
 
 ## Summary
 
-The protocol files at [doc-vault/protocol/](.) cover the canvas object shape, the patch‑event idea, and a sketch of an exports API. The wire contract that a real implementer needs — auth, errors, state machines, the live‑events transport, the feedback‑callback shape, the full route table, the block taxonomy — currently lives implicitly in [apps/hub/src/types.ts](../../apps/hub/src/types.ts) and [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+The protocol files at [doc-vault/protocol/](.) cover the canvas object shape, the patch‑event idea, and a sketch of an exports API. The wire contract that a real implementer needs — auth, errors, state machines, the live‑events transport, the feedback‑callback shape, the full route table, the block taxonomy — currently lives implicitly in [apps/hub/src/types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts) and [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts).
 
 This report identifies 18 structural gaps. Eleven new spec files and four edits to existing files close them. See [Files added or modified](#files-added-or-modified).
 
@@ -27,7 +27,7 @@ This report identifies 18 structural gaps. Eleven new spec files and four edits 
 |---|---|---|---|
 | 1 | Problem statement + Goals & Non‑Goals | Marketing prose in [index.mdx](./index.mdx) | [index.mdx](./index.mdx) — rewritten with Goals / Non‑Goals / Three roles |
 | 2 | RFC 2119 keywords (MUST / SHOULD / MAY) | "should," "potential," "can" — non‑normative | [conformance.mdx](./conformance.mdx) and applied across all files |
-| 3 | Named domain model | Scattered in [types.ts](../../apps/hub/src/types.ts) | [schema.mdx](./schema.mdx), [blocks.mdx](./blocks.mdx), [agent-runs.mdx](./agent-runs.mdx) |
+| 3 | Named domain model | Scattered in [types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts) | [schema.mdx](./schema.mdx), [blocks.mdx](./blocks.mdx), [agent-runs.mdx](./agent-runs.mdx) |
 | 4 | State machines | TS unions only | [lifecycle.mdx](./lifecycle.mdx) |
 | 5 | Formal API surface with verbs, paths, request/response, status codes | "Potential endpoints:" sketch in [exports-api.mdx](./exports-api.mdx) | [hub-api.mdx](./hub-api.mdx) |
 | 6 | Auth & identity model | Absent from spec; bearer tokens implicit in code | [auth.mdx](./auth.mdx) |
@@ -41,7 +41,7 @@ This report identifies 18 structural gaps. Eleven new spec files and four edits 
 | 14 | Implementation checklist | Absent | [checklists.mdx](./checklists.mdx) |
 | 15 | Test / validation matrix | Absent | [conformance.mdx#conformance-tests](./conformance.mdx#conformance-tests) |
 | 16 | Security / trust boundaries | Absent | [auth.mdx#security](./auth.mdx#security) |
-| 17 | Block taxonomy | 17 kinds in [types.ts](../../apps/hub/src/types.ts) only | [blocks.mdx](./blocks.mdx) |
+| 17 | Block taxonomy | 17 kinds in [types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts) only | [blocks.mdx](./blocks.mdx) |
 | 18 | Worked examples (curl, callback bodies, event excerpts) | One canvas JSON, one patch | Embedded in [hub-api.mdx](./hub-api.mdx), [agent-runs.mdx](./agent-runs.mdx), [recipes.mdx](./recipes.mdx) |
 
 ## Files added or modified

@@ -5,7 +5,7 @@ description: "The normative HTTP surface a conforming Hub MUST expose."
 
 This document is the normative HTTP surface of the Knify Canvas Protocol. A conforming HUB MUST expose every endpoint listed under [Core](#core), with the documented verbs, status codes, and request/response shapes.
 
-The shapes below are drawn from [apps/hub/src/types.ts](../../apps/hub/src/types.ts). The route table is drawn from [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+The shapes below are drawn from [apps/hub/src/types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts). The route table is drawn from [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts).
 
 ## Conventions
 
@@ -13,7 +13,7 @@ The shapes below are drawn from [apps/hub/src/types.ts](../../apps/hub/src/types
 - Content type: requests and responses MUST be `application/json`, except asset bodies and the SSE stream.
 - Authentication: every endpoint requires a bearer token, except `GET /v1/healthz` and `POST /v1/viewer-links/<id>/exchange`. See [auth.mdx](./auth.mdx).
 - Errors: every non‑2xx response uses the envelope in [errors.mdx](./errors.mdx).
-- IDs: every `*Id` is a string. The HUB MUST validate id charset and length (see `validateID` in [apps/hub/src/utils.ts](../../apps/hub/src/utils.ts)). A request that supplies an invalid id MUST return `400 bad_request`.
+- IDs: every `*Id` is a string. The HUB MUST validate id charset and length (see `validateID` in [apps/hub/src/utils.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/utils.ts)). A request that supplies an invalid id MUST return `400 bad_request`.
 
 ## Core {#core}
 

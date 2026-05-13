@@ -36,9 +36,20 @@
       {
         "group": "Protocol",
         "pages": [
+          "protocol/index",
+          "protocol/conformance",
+          "protocol/auth",
+          "protocol/errors",
           "protocol/schema",
+          "protocol/blocks",
+          "protocol/lifecycle",
+          "protocol/hub-api",
+          "protocol/agent-runs",
           "protocol/live-events",
-          "protocol/exports-api"
+          "protocol/exports-api",
+          "protocol/recipes",
+          "protocol/checklists",
+          "protocol/gap-report"
         ]
       },
       {

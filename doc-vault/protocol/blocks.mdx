@@ -5,7 +5,7 @@ description: "The canonical block taxonomy and how viewers MUST handle unknown k
 
 A canvas is a list of typed `blocks`. Each block has a stable `id`, a `kind` from the closed set below, and a set of kind‑specific fields. A VIEWER MUST render every kind it claims to support and MUST render a fallback for kinds it does not (see [Fallback](#fallback)).
 
-The source of truth for the field set on every block is the `Block` interface in [apps/hub/src/types.ts](../../apps/hub/src/types.ts).
+The source of truth for the field set on every block is the `Block` interface in [apps/hub/src/types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts).
 
 ## Common fields
 
@@ -37,7 +37,7 @@ Every block carries:
 | `split` | Weighted split into named slices | `slices: SplitSlice[]` |
 | `rule-builder` | A typed rule builder | `ruleSchema: RuleSchema`, `clauses: RuleClause[]` |
 
-The full per‑kind field set (e.g. `ChartSpec.series[].data[]`, `FormField.type`) is normative and lives in [apps/hub/src/types.ts](../../apps/hub/src/types.ts). A future MINOR bump MAY add new kinds; viewers MUST forward‑compatibly fall back to a labeled placeholder.
+The full per‑kind field set (e.g. `ChartSpec.series[].data[]`, `FormField.type`) is normative and lives in [apps/hub/src/types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts). A future MINOR bump MAY add new kinds; viewers MUST forward‑compatibly fall back to a labeled placeholder.
 
 ## Fallback {#fallback}
 
@@ -51,7 +51,7 @@ The reference web viewer renders such blocks as a `<UnknownBlock>` card with the
 
 ## Edit ops and block kinds
 
-`POST /v1/canvases/:id/edits` (see [lifecycle.mdx#canvas-edits](./lifecycle.mdx#canvas-edits)) carries ops that target specific block kinds. The HUB MUST validate kind/op compatibility via `opRequiresBlockKind`. A consumer that authors edits MUST consult [apps/hub/src/validation.ts](../../apps/hub/src/validation.ts) for the current op→kind mapping; a future MINOR bump SHOULD lift that mapping into this document.
+`POST /v1/canvases/:id/edits` (see [lifecycle.mdx#canvas-edits](./lifecycle.mdx#canvas-edits)) carries ops that target specific block kinds. The HUB MUST validate kind/op compatibility via `opRequiresBlockKind`. A consumer that authors edits MUST consult [apps/hub/src/validation.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/validation.ts) for the current op→kind mapping; a future MINOR bump SHOULD lift that mapping into this document.
 
 ## Assets
 

@@ -19,7 +19,7 @@ Every implementation MUST declare which of the three roles it implements:
 - **HUB** — exposes the Knify HTTP API and persists canvases, events, feedback, agent runs, assets, viewer links
 - **VIEWER** (also: **API consumer**) — reads canvases, exports, and the event stream
 
-An implementation MAY implement more than one role. The Reference Hub at [apps/hub/](../../apps/hub/) is a conforming HUB. The bundled web and iPad viewers are conforming VIEWERs.
+An implementation MAY implement more than one role. The Reference Hub at [apps/hub/](https://github.com/quickowl/knify/tree/main/apps/hub) is a conforming HUB. The bundled web and iPad viewers are conforming VIEWERs.
 
 ## Protocol identifier and versioning
 
@@ -48,7 +48,7 @@ The protocol is extensible in three ways.
 
 ### Unknown‑field tolerance
 
-- A HUB MUST reject **top‑level** fields it does not recognize on writes (the reference Hub uses an explicit allowlist; see `canvasKeys`, `agentRunKeys`, `feedbackKeys` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)) — this preserves forward error reporting.
+- A HUB MUST reject **top‑level** fields it does not recognize on writes (the reference Hub uses an explicit allowlist; see `canvasKeys`, `agentRunKeys`, `feedbackKeys` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)) — this preserves forward error reporting.
 - A HUB MAY accept and round‑trip nested fields it does not recognize inside `meta`, `metadata`, `payload`, and `block.metadata`. These are reserved for extension data.
 - A VIEWER MUST ignore fields it does not recognize and continue rendering.
 
@@ -67,7 +67,7 @@ Viewer links expose a closed set of capabilities (see [auth.mdx#viewer-links](./
 - `asset.read`
 - `feedback.submit`
 
-A HUB MUST reject unknown capabilities at preflight (see `handleViewerLinksPreflight` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). Adding new capabilities is a MINOR bump.
+A HUB MUST reject unknown capabilities at preflight (see `handleViewerLinksPreflight` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)). Adding new capabilities is a MINOR bump.
 
 ## Conformance tests
 
@@ -77,9 +77,9 @@ A conforming implementation MUST pass the **Core** tests for its role. **Extensi
 
 | Test | Source of truth |
 |---|---|
-| Produces a canvas whose JSON validates against [schema.mdx](./schema.mdx) | `canvasKeys` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Produces a canvas whose JSON validates against [schema.mdx](./schema.mdx) | `canvasKeys` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
 | Stamps every block with a stable `id` | [schema.mdx#stable-ids](./schema.mdx) |
-| Emits canvas log events in the order specified by [lifecycle.mdx](./lifecycle.mdx) | `CanvasLogEventType` in [types.ts](../../apps/hub/src/types.ts) |
+| Emits canvas log events in the order specified by [lifecycle.mdx](./lifecycle.mdx) | `CanvasLogEventType` in [types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts) |
 | Honours the canvas status transitions in [lifecycle.mdx](./lifecycle.mdx#canvas-status) | |
 | Submits with a valid bearer token and surfaces the Hub error code on failure | [auth.mdx](./auth.mdx), [errors.mdx](./errors.mdx) |
 | Verifies HMAC on feedback callbacks when a signing secret is configured | [agent-runs.mdx#callback-signing](./agent-runs.mdx#callback-signing) |
@@ -88,14 +88,14 @@ A conforming implementation MUST pass the **Core** tests for its role. **Extensi
 
 | Test | Source of truth |
 |---|---|
-| Implements every route listed in [hub-api.mdx](./hub-api.mdx) with the documented verbs and status codes | [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Implements every route listed in [hub-api.mdx](./hub-api.mdx) with the documented verbs and status codes | [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
 | Returns the [errors.mdx](./errors.mdx) envelope for every non‑2xx response | |
-| Rejects unknown top‑level fields on writes | `rejectUnknown` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
-| Enforces optimistic concurrency on `POST /v1/canvases/:id/edits` via `expectedVersion` | `handleCanvasEdits` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
-| Emits the Hub event stream over SSE as specified in [live-events.mdx](./live-events.mdx) | `handleEvents` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
-| Retries feedback deliveries with exponential backoff and dead‑letters at `maxAttempts` | `processDelivery` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
-| Enforces workspace isolation on every authenticated request | `workspaceVisible` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
-| Validates viewer link secrets and scopes sessions to a single canvas | `handleViewerSession` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts) |
+| Rejects unknown top‑level fields on writes | `rejectUnknown` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
+| Enforces optimistic concurrency on `POST /v1/canvases/:id/edits` via `expectedVersion` | `handleCanvasEdits` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
+| Emits the Hub event stream over SSE as specified in [live-events.mdx](./live-events.mdx) | `handleEvents` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
+| Retries feedback deliveries with exponential backoff and dead‑letters at `maxAttempts` | `processDelivery` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
+| Enforces workspace isolation on every authenticated request | `workspaceVisible` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
+| Validates viewer link secrets and scopes sessions to a single canvas | `handleViewerSession` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) |
 
 ### VIEWER — Core
 

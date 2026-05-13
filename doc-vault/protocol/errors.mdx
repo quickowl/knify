@@ -21,7 +21,7 @@ Every non‑2xx response MUST have `Content-Type: application/json` and a body s
 - `code` (string, recommended) — a stable machine identifier from the [Error codes](#error-codes) table. Older Hub responses MAY omit `code`; clients MUST tolerate that and fall back to the HTTP status.
 - `details` (object, optional) — structured context (e.g. preflight check list, validation field name).
 
-The reference Hub's helper is `errorResponse(error)` in [apps/hub/src/utils.ts](../../apps/hub/src/utils.ts) (see usage in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+The reference Hub's helper is `errorResponse(error)` in [apps/hub/src/utils.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/utils.ts) (see usage in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)).
 
 ## HTTP status mapping
 
@@ -55,9 +55,9 @@ A HUB MUST use these status codes consistently. A HUB MUST NOT return `200 OK` w
 
 ## Validation errors
 
-A HUB MUST reject requests that include unknown top‑level fields on writes (the reference Hub uses an explicit allowlist for every endpoint; see `canvasKeys`, `agentRunKeys`, `agentEventKeys`, `feedbackKeys`, etc. in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). The error is `400 bad_request` with a message naming the unknown field.
+A HUB MUST reject requests that include unknown top‑level fields on writes (the reference Hub uses an explicit allowlist for every endpoint; see `canvasKeys`, `agentRunKeys`, `agentEventKeys`, `feedbackKeys`, etc. in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)). The error is `400 bad_request` with a message naming the unknown field.
 
-A HUB MUST validate every `id` field against the protocol's id rules (URL‑safe ASCII, length bounded; see `validateID` in [apps/hub/src/utils.ts](../../apps/hub/src/utils.ts)) and return `400 bad_request` on violation.
+A HUB MUST validate every `id` field against the protocol's id rules (URL‑safe ASCII, length bounded; see `validateID` in [apps/hub/src/utils.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/utils.ts)) and return `400 bad_request` on violation.
 
 ## Retry guidance for clients
 
@@ -70,4 +70,4 @@ A HUB MUST validate every `id` field against the protocol's id rules (URL‑safe
 
 ## CORS
 
-CORS rejections MUST also use the error envelope: a `403` with `error: "cors origin is not allowed"` is the reference behavior (see `handleCORS` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)).
+CORS rejections MUST also use the error envelope: a `403` with `error: "cors origin is not allowed"` is the reference behavior (see `handleCORS` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)).

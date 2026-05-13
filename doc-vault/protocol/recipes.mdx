@@ -146,9 +146,9 @@ val = GET /v1/canvases/:id/exports/:name
 
 The reference Hub implements every recipe above:
 
-- [apps/hub/src/app.ts](../../apps/hub/src/app.ts) — routes, auth, dispatch
-- [apps/hub/src/types.ts](../../apps/hub/src/types.ts) — wire types
-- [apps/hub/src/validation.ts](../../apps/hub/src/validation.ts) — normalization and validation
-- [apps/hub/src/events.ts](../../apps/hub/src/events.ts) — SSE event bus over Durable Objects
+- [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts) — routes, auth, dispatch
+- [apps/hub/src/types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts) — wire types
+- [apps/hub/src/validation.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/validation.ts) — normalization and validation
+- [apps/hub/src/events.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/events.ts) — SSE event bus over Durable Objects
 
-The reference viewer ([apps/viewer-web](../../apps/viewer-web), [apps/viewer-ipad](../../apps/viewer-ipad)) implements the VIEWER recipes, and the [agentic-canvas](../../.claude/skills/agentic-canvas) skill encodes the AGENT recipes for Claude Code agents.
+The reference web viewer ([apps/site](https://github.com/quickowl/knify/tree/main/apps/site)) implements the VIEWER recipes, and the `agentic-canvas` skill (shipped separately in agent skill packs) encodes the AGENT recipes for Claude Code agents.

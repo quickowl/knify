@@ -37,7 +37,7 @@ The mode of a canvas is independent of status:
 
 ## Canvas log events {#canvas-log-events}
 
-Dynamic canvases progress through these event types (`CanvasLogEventType` in [apps/hub/src/types.ts](../../apps/hub/src/types.ts)):
+Dynamic canvases progress through these event types (`CanvasLogEventType` in [apps/hub/src/types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts)):
 
 | Type | Effect |
 |---|---|
@@ -58,7 +58,7 @@ Canvases admit edits from non‑producer actors (e.g. a viewer with `feedback.su
 
 - Reject with `409 conflict` if `expectedVersion` does not match the stored canvas `version`.
 - Validate that every op references a block id that exists in the current canvas.
-- Validate that every op whose `op` requires a specific block kind matches the kind of the referenced block (see `opRequiresBlockKind` in [apps/hub/src/validation.ts](../../apps/hub/src/validation.ts)).
+- Validate that every op whose `op` requires a specific block kind matches the kind of the referenced block (see `opRequiresBlockKind` in [apps/hub/src/validation.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/validation.ts)).
 
 The HUB stores the edit and emits `canvas.edit.submitted`. Applying the edit to the canvas state is currently the producing agent's responsibility — the HUB stores the proposal.
 
@@ -75,7 +75,7 @@ Snapshots are addressable at `GET /v1/canvases/:id/snapshots/:sid`. Restore at `
 
 ## Agent run status
 
-An agent run (see [agent-runs.mdx](./agent-runs.mdx)) has a `status` taken from this closed set (`AgentRunStatus` in [apps/hub/src/types.ts](../../apps/hub/src/types.ts)):
+An agent run (see [agent-runs.mdx](./agent-runs.mdx)) has a `status` taken from this closed set (`AgentRunStatus` in [apps/hub/src/types.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/types.ts)):
 
 | Status | Meaning |
 |---|---|
@@ -93,7 +93,7 @@ registered ──► running ──► waiting_for_feedback ──► completed
                                  └─────► expired ───────┘
 ```
 
-A HUB MUST update `agent_run.status` from agent‑event `status` fields when an event carries one (see `recordAgentEvent` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). The HUB emits `agent.run.updated` on every status change.
+A HUB MUST update `agent_run.status` from agent‑event `status` fields when an event carries one (see `recordAgentEvent` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)). The HUB emits `agent.run.updated` on every status change.
 
 ## Feedback delivery {#reliability}
 
@@ -116,7 +116,7 @@ A HUB MUST implement exponential backoff with a per‑target cap. The reference 
 nextAttemptAt = now + min(2 ** (attempts - 1), 30) seconds
 ```
 
-and defaults `maxAttempts` to 1 for `webhook` providers and 3 for other providers, overridable by `target.metadata.maxAttempts`. See `processDelivery` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts).
+and defaults `maxAttempts` to 1 for `webhook` providers and 3 for other providers, overridable by `target.metadata.maxAttempts`. See `processDelivery` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts).
 
 When `attempts >= maxAttempts` the delivery becomes `dead_lettered`, the parent `Feedback.deliveryStatus` becomes `failed`, and the HUB emits both `feedback.dead_lettered` and `feedback.failed`.
 
@@ -126,7 +126,7 @@ The HUB MUST send `Idempotency-Key: <deliveryId>` on every outbound webhook atte
 
 ### Provider edge‑deliverability
 
-Only `webhook`, `generic_cloud`, and `cursor` are deliverable directly from the HUB (see `edgeDeliverable` in [apps/hub/src/app.ts](../../apps/hub/src/app.ts)). Other providers (`cursor_cli`, `codex`, `codex_exec`, `claude`, `claude_cli`) require a local sidecar that polls feedback deliveries — see [agent-runs.mdx#sidecar](./agent-runs.mdx#sidecar).
+Only `webhook`, `generic_cloud`, and `cursor` are deliverable directly from the HUB (see `edgeDeliverable` in [apps/hub/src/app.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/app.ts)). Other providers (`cursor_cli`, `codex`, `codex_exec`, `claude`, `claude_cli`) require a local sidecar that polls feedback deliveries — see [agent-runs.mdx#sidecar](./agent-runs.mdx#sidecar).
 
 ## Event ordering and replay
 
