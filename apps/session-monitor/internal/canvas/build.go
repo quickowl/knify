@@ -128,13 +128,22 @@ func BuildCanvas(cfg types.Config, sessions []types.LocalSession, health []types
 		})
 		childBlockIDs = append(childBlockIDs, metaID)
 		items = append(items, map[string]any{
-			"id":       fmt.Sprintf("session-%02d", i+1),
-			"label":    core.Truncate(label, 120),
-			"subtitle": core.Truncate(sessionListSubtitle(session, now), 420),
-			"status":   session.Match.Status,
-			"badges":   badges,
-			"addedAt":  core.FirstNonEmpty(session.UpdatedAt, core.FormatTime(now)),
-			"blockIds": childBlockIDs,
+			"id":             fmt.Sprintf("session-%02d", i+1),
+			"sessionId":      session.SessionID,
+			"label":          core.Truncate(label, 120),
+			"subtitle":       core.Truncate(sessionListSubtitle(session, now), 420),
+			"status":         session.Match.Status,
+			"attention":      attention,
+			"updatedAt":      core.FirstNonEmpty(session.UpdatedAt, core.FormatTime(now)),
+			"purpose":        core.Truncate(review.Purpose, 180),
+			"currentState":   core.Truncate(review.CurrentState, 240),
+			"evidenceStatus": review.EvidenceStatus,
+			"nextStep":       core.Truncate(review.NextStep, 180),
+			"artifactCount":  len(session.Artifacts),
+			"planLabel":      planLabelForCollection(session.Plan),
+			"badges":         badges,
+			"addedAt":        core.FirstNonEmpty(session.UpdatedAt, core.FormatTime(now)),
+			"blockIds":       childBlockIDs,
 		})
 		blocks = append(blocks, childBlocks...)
 	}
@@ -188,6 +197,13 @@ func sortSessionsByUpdatedAt(sessions []types.LocalSession) []types.LocalSession
 		return left.After(right)
 	})
 	return out
+}
+
+func planLabelForCollection(plan types.SessionPlan) string {
+	if plan.Key == "" && plan.Title == "" {
+		return ""
+	}
+	return planLabel(plan)
 }
 
 func CompactDynamicCanvas(canvas types.Canvas) types.Canvas {

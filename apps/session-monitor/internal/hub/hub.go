@@ -95,6 +95,43 @@ func postCanvas(ctx context.Context, cfg types.Config, canvas types.Canvas) (map
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if legacyCollectionItemError(data) {
+			return postCanvasLegacy(ctx, cfg, canvas)
+		}
+		return nil, fmt.Errorf("POST /v1/canvases returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var response map[string]any
+	if len(data) > 0 {
+		_ = json.Unmarshal(data, &response)
+	}
+	return response, nil
+}
+
+func postCanvasLegacy(ctx context.Context, cfg types.Config, canvas types.Canvas) (map[string]any, error) {
+	legacy := canvas
+	legacy.Blocks = stripCollectionItemExtensions(canvas.Blocks)
+	body, err := json.Marshal(legacy)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, types.HubRequestTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(cfg.HubURL, "/")+"/v1/canvases", bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	if cfg.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.Token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, fmt.Errorf("POST /v1/canvases returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	var response map[string]any

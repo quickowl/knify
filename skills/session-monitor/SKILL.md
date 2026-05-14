@@ -35,6 +35,10 @@ make session-monitor-status
 
 For flags and environment variables, use `apps/session-monitor/README.md`.
 
+## Visual Decision Reviewer
+
+For screenshot-based UX review of the session monitor, spawn a Codex subagent with `visual-decision-reviewer.md` as the reviewer prompt. The reviewer reports back to the current thread; it does not submit Hub feedback, auto-nudge sessions, or write provider state.
+
 ## Deployment Through `npx skills`
 
 Use the root Make targets so the command sequence stays consistent:

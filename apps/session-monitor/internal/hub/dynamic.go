@@ -162,6 +162,13 @@ func postCanvasEvent(ctx context.Context, cfg types.Config, event types.CanvasLo
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		if event.Block != nil && legacyCollectionItemError(data) {
+			legacy := event
+			legacy.Block = stripBlockCollectionItemExtensions(event.Block)
+			if !blocksEqual(event.Block, legacy.Block) {
+				return postCanvasEvent(ctx, cfg, legacy)
+			}
+		}
 		return nil, fmt.Errorf("POST /v1/canvases/%s/events returned %d: %s", event.CanvasID, resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	var response map[string]any

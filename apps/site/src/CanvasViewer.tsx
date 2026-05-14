@@ -58,6 +58,12 @@ type CollectionItem = {
   status?: string;
   attention?: string;
   updatedAt?: string;
+  purpose?: string;
+  currentState?: string;
+  evidenceStatus?: string;
+  nextStep?: string;
+  artifactCount?: number;
+  planLabel?: string;
   badges: string[];
   blockIds: string[];
 };
@@ -642,10 +648,9 @@ function renderBlock(
       return <a className="hub-surface hub-link" href={url} target="_blank" rel="noreferrer"><strong>{readBlockValue<string>(block, "title") || url}</strong><ExternalLink size={15} /></a>;
     }
     case "image": {
-      const assetID = readBlockValue<string>(block, "assetId") || readBlockValue<string>(block, "assetID");
-      const url = resolveHubPath(readBlockValue<string>(block, "url") || (assetID ? `/v1/assets/${assetID}` : ""));
+      const url = absoluteImageURL(readBlockValue<string>(block, "url"));
       const alt = readBlockValue<string>(block, "alt") || "Canvas image";
-      return <figure className="hub-image">{url ? <img src={url} alt={alt} /> : <div>{alt}</div>}{readBlockValue<string>(block, "caption") ? <figcaption>{readBlockValue<string>(block, "caption")}</figcaption> : null}</figure>;
+      return <figure className="hub-image">{url ? <img src={url} alt={alt} /> : <div className="hub-image-placeholder">{alt}</div>}{readBlockValue<string>(block, "caption") ? <figcaption>{readBlockValue<string>(block, "caption")}</figcaption> : null}</figure>;
     }
     case "metadata":
       return <MetadataBlock block={block} />;
@@ -685,6 +690,7 @@ function CollectionBlock({ block, blockByID, selectedItemID, onSelectItem }: { b
   const ordered = hasReadable
     ? [...filtered].sort((a, b) => readStateRank(readStateById.get(a.id)) - readStateRank(readStateById.get(b.id)))
     : filtered;
+  const grouped = groupCollectionItems(ordered);
 
   const selected = ordered.find((item) => item.id === selectedItemID) || ordered[0];
 
@@ -723,17 +729,36 @@ function CollectionBlock({ block, blockByID, selectedItemID, onSelectItem }: { b
         ) : null}
       </div>
       <div className="collection-list">
-        {ordered.slice(0, Math.max(collection.pageSize, 12)).map((item) => {
-          const rs = readStateById.get(item.id);
-          return (
-            <button className={`${item.id === selected?.id ? "selected" : ""} read-${rs ?? "read"}`} key={item.id} onClick={() => handleSelect(item)}>
-              {rs ? <span className={`read-dot read-dot-${rs}`} aria-label={rs} /> : null}
-              <strong>{item.label}</strong>
-              <span>{[item.subtitle, item.status].filter(Boolean).join(" · ")}</span>
-              {item.badges.length ? <small>{item.badges.slice(0, 4).join(" · ")}</small> : null}
-            </button>
-          );
-        })}
+        {grouped.map((group) => (
+          <div className="collection-priority-group" key={group.id}>
+            <div className={`collection-group-heading group-${group.id}`}>
+              <strong>{groupHeadingLabel(group)}</strong>
+              <span>{group.items.length}</span>
+            </div>
+            {group.items.slice(0, Math.max(collection.pageSize, 12)).map((item) => {
+              const rs = readStateById.get(item.id);
+              const sessionTriage = isSessionTriageItem(item);
+              return (
+                <button
+                  className={`collection-card ${sessionTriage ? `session-triage-card ${priorityClass(item)}` : ""} ${item.id === selected?.id ? "selected" : ""} read-${rs ?? "read"}`}
+                  key={item.id}
+                  onClick={() => handleSelect(item)}
+                >
+                  {sessionTriage ? (
+                    <SessionTriageCard item={item} readState={rs} />
+                  ) : (
+                    <>
+                      {rs ? <span className={`read-dot read-dot-${rs}`} aria-label={rs} /> : null}
+                      <strong>{item.label}</strong>
+                      <span>{[item.subtitle, item.status].filter(Boolean).join(" | ")}</span>
+                      {item.badges.length ? <small>{item.badges.slice(0, 4).join(" | ")}</small> : null}
+                    </>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </div>
       {selected ? (
         <div className="collection-selected">
@@ -750,6 +775,182 @@ function CollectionBlock({ block, blockByID, selectedItemID, onSelectItem }: { b
       ) : null}
     </section>
   );
+}
+
+type CollectionGroup = {
+  id: "decision" | "active" | "nudge" | "other";
+  label: string;
+  items: CollectionItem[];
+};
+
+function groupCollectionItems(items: CollectionItem[]): CollectionGroup[] {
+  const groups: CollectionGroup[] = [
+    { id: "decision", label: "Needs decision", items: [] },
+    { id: "active", label: "Active / watching", items: [] },
+    { id: "nudge", label: "Needs nudge", items: [] },
+    { id: "other", label: "Other sessions", items: [] },
+  ];
+  for (const item of items) {
+    groups.find((group) => group.id === priorityBucket(item))?.items.push(item);
+  }
+  return groups.filter((group) => group.items.length > 0);
+}
+
+function SessionTriageCard({ item, readState }: { item: CollectionItem; readState?: ReadState }) {
+  const provider = providerLabel(item);
+  const title = item.label.startsWith(`${provider}: `) ? item.label.slice(provider.length + 2) : item.purpose || item.label;
+  const evidenceText = item.artifactCount && item.artifactCount > 0 ? `${item.evidenceStatus || "evidence"} (${item.artifactCount})` : item.evidenceStatus || "unknown";
+  const action = actionLabel(item.nextStep);
+  const bucket = priorityBucket(item);
+
+  return (
+    <>
+      <div className="session-card-head">
+        {readState ? <span className={`read-dot read-dot-${readState}`} aria-label={readState} /> : null}
+        <div>
+          <span>{provider}</span>
+          <strong>{title}</strong>
+        </div>
+        <time className={`state-${bucket}`}>{stateLabel(item)}</time>
+      </div>
+      <div className="session-chip-row">
+        <span className={`session-chip evidence-${cleanClass(item.evidenceStatus)}`}>evidence {evidenceText}</span>
+        <span className={`session-chip status-${cleanClass(item.status)}`}>{statusText(item.status)}</span>
+      </div>
+      <div className={`session-primary-action action-${cleanClass(action)}`}>{primaryActionText(action)}</div>
+      {bucket === "decision" ? (
+        <div className="session-choice-row" aria-label="Decision choices">
+          <span>Link session</span>
+          <span>Ignore</span>
+          <span>Resume context</span>
+        </div>
+      ) : null}
+      {item.planLabel ? <div className="session-plan-line">{item.planLabel}</div> : null}
+      <div className="session-card-reason">{decisionReason(item)}</div>
+      <div className="session-card-facts">
+        <span>{compactCardFact(item)}</span>
+      </div>
+    </>
+  );
+}
+
+function groupHeadingLabel(group: CollectionGroup): string {
+  if (group.id === "decision") return `${group.items.length} decision${group.items.length === 1 ? "" : "s"} needed`;
+  if (group.id === "active") return `${group.items.length} active / watching`;
+  if (group.id === "nudge") return `${group.items.length} need nudge`;
+  return `${group.items.length} other session${group.items.length === 1 ? "" : "s"}`;
+}
+
+function priorityBucket(item: CollectionItem): CollectionGroup["id"] {
+  const action = actionLabel(item.nextStep);
+  if (action === "decide" || action === "confirm") return "decision";
+  if (item.attention === "running" || item.currentState?.includes(", active")) return "active";
+  if (action === "nudge" || item.evidenceStatus === "missing") return "nudge";
+  return "other";
+}
+
+function priorityClass(item: CollectionItem): string {
+  return `priority-${priorityBucket(item)}`;
+}
+
+function isSessionTriageItem(item: CollectionItem): boolean {
+  return Boolean(item.sessionId && (item.currentState || item.nextStep || item.evidenceStatus));
+}
+
+function providerLabel(item: CollectionItem): string {
+  const providerBadge = item.badges.find((badge) => badge === "codex" || badge === "claude" || badge === "cursor");
+  if (providerBadge) return providerBadge.charAt(0).toUpperCase() + providerBadge.slice(1);
+  const separator = item.label.indexOf(":");
+  return separator > 0 ? item.label.slice(0, separator) : "Session";
+}
+
+function evidenceSummary(item: CollectionItem): string {
+  const count = item.artifactCount ?? 0;
+  if (count > 0) return `${item.evidenceStatus || "ready"} with ${count} artifact${count === 1 ? "" : "s"}`;
+  if (item.evidenceStatus === "missing") return "missing; likely needs a nudge";
+  if (item.evidenceStatus === "pending") return "pending while session remains active";
+  return item.evidenceStatus || "unknown";
+}
+
+function statusText(status: string | undefined): string {
+  if (status === "unmatched") return "not linked";
+  if (status === "likely") return "likely link";
+  return status || "unknown";
+}
+
+function stateLabel(item: CollectionItem): string {
+  const age = shortTimeLabel(item.updatedAt);
+  if (item.attention === "running") return "Live now";
+  if (item.currentState?.includes(", active")) return `Active ${age}`;
+  if (actionLabel(item.nextStep) === "nudge") return `Idle ${age}`;
+  return age;
+}
+
+function decisionReason(item: CollectionItem): string {
+  const action = actionLabel(item.nextStep);
+  if (action === "decide") return "Needs matching decision.";
+  if (action === "confirm") return "Confirm likely match.";
+  if (action === "nudge") return "Waiting for evidence.";
+  if (action === "watch") return item.evidenceStatus === "ready" ? "Live with evidence ready." : "Watching for output.";
+  if (action === "review") return "Review detail before deciding next step.";
+  return item.nextStep || "Choose the next action for this session.";
+}
+
+function compactCardFact(item: CollectionItem): string {
+  const current = item.currentState || item.subtitle || "No current state recorded.";
+  const state = current
+    .replace(/; assistant:.*/i, "")
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("; ");
+  return [evidenceSummary(item), state].filter(Boolean).join(" | ");
+}
+
+function actionLabel(nextStep: string | undefined): string {
+  const text = (nextStep || "").toLowerCase();
+  if (text.startsWith("keep watching")) return "watch";
+  if (text.startsWith("confirm")) return "confirm";
+  if (text.startsWith("send")) return "nudge";
+  if (text.startsWith("review")) return "review";
+  if (text.startsWith("decide")) return "decide";
+  return "action";
+}
+
+function primaryActionText(action: string): string {
+  switch (action) {
+    case "decide":
+      return "Decide now";
+    case "confirm":
+      return "Confirm link";
+    case "nudge":
+      return "Send nudge";
+    case "review":
+      return "Review details";
+    case "watch":
+      return "Keep watching";
+    default:
+      return "Choose action";
+  }
+}
+
+function shortTimeLabel(value: string | undefined): string {
+  if (!value) return "unknown";
+  const then = Date.parse(value);
+  if (Number.isNaN(then)) return value.slice(0, 10);
+  const deltaMs = Date.now() - then;
+  if (deltaMs < -60_000) return "future";
+  if (deltaMs < 60_000) return "now";
+  const minutes = Math.floor(deltaMs / 60_000);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function cleanClass(value: string | undefined): string {
+  return (value || "unknown").toLowerCase().replace(/[^a-z0-9-]/g, "-");
 }
 
 function readStateRank(state: ReadState | undefined): number {
@@ -835,17 +1036,70 @@ function readCollectionItem(raw: unknown, index: number): CollectionItem | undef
   const id = String(record.id ?? `item-${index + 1}`);
   const label = String(record.label ?? record.title ?? blockIds[0] ?? id).trim();
   if (!label || !blockIds.length) return undefined;
+  const subtitle = typeof record.subtitle === "string" ? record.subtitle : undefined;
+  const badges = Array.isArray(record.badges) ? record.badges.map(String) : [];
+  const parsed = parseSessionSubtitle(subtitle);
+  const evidenceStatus = typeof record.evidenceStatus === "string" ? record.evidenceStatus : evidenceStatusFrom(parsed.evidence || badgeValue(badges, "evidence"));
+  const artifactCount = typeof record.artifactCount === "number" ? record.artifactCount : numberFromBadge(badges, "artifacts");
   return {
     id,
-    sessionId: typeof record.sessionId === "string" ? record.sessionId : undefined,
+    sessionId: typeof record.sessionId === "string" ? record.sessionId : id.startsWith("session-") ? id : undefined,
     label,
-    subtitle: typeof record.subtitle === "string" ? record.subtitle : undefined,
+    subtitle,
     status: typeof record.status === "string" ? record.status : undefined,
-    attention: typeof record.attention === "string" ? record.attention : undefined,
-    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : undefined,
-    badges: Array.isArray(record.badges) ? record.badges.map(String) : [],
+    attention: typeof record.attention === "string" ? record.attention : badgeValue(badges, "attention"),
+    updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : typeof record.addedAt === "string" ? record.addedAt : undefined,
+    purpose: typeof record.purpose === "string" ? record.purpose : parsed.purpose,
+    currentState: typeof record.currentState === "string" ? record.currentState : parsed.currentState,
+    evidenceStatus,
+    nextStep: typeof record.nextStep === "string" ? record.nextStep : parsed.nextStep,
+    artifactCount,
+    planLabel: typeof record.planLabel === "string" ? record.planLabel : parsed.planLabel,
+    badges,
     blockIds,
   };
+}
+
+function parseSessionSubtitle(subtitle: string | undefined): Partial<Pick<CollectionItem, "purpose" | "currentState" | "nextStep" | "planLabel">> & { evidence?: string } {
+  if (!subtitle) return {};
+  return {
+    purpose: readSubtitleSection(subtitle, "Purpose", ["Plan", "Now", "Evidence", "Next"]),
+    planLabel: readSubtitleSection(subtitle, "Plan", ["Now", "Evidence", "Next"]),
+    currentState: readSubtitleSection(subtitle, "Now", ["Evidence", "Next"]),
+    evidence: readSubtitleSection(subtitle, "Evidence", ["Next"]),
+    nextStep: readSubtitleSection(subtitle, "Next", []),
+  };
+}
+
+function readSubtitleSection(text: string, label: string, nextLabels: string[]): string | undefined {
+  const startToken = `${label}: `;
+  const start = text.indexOf(startToken);
+  if (start < 0) return undefined;
+  const valueStart = start + startToken.length;
+  const ends = nextLabels
+    .map((next) => text.indexOf(` - ${next}: `, valueStart))
+    .filter((position) => position >= 0);
+  const end = ends.length ? Math.min(...ends) : text.length;
+  const value = text.slice(valueStart, end).trim();
+  return value || undefined;
+}
+
+function badgeValue(badges: string[], prefix: string): string | undefined {
+  const value = badges.find((badge) => badge.startsWith(`${prefix}:`));
+  return value ? value.slice(prefix.length + 1) : undefined;
+}
+
+function numberFromBadge(badges: string[], prefix: string): number | undefined {
+  const value = badgeValue(badges, prefix);
+  if (!value) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function evidenceStatusFrom(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const first = value.trim().split(/\s+/)[0];
+  return first || undefined;
 }
 
 function chartPoints(block: CanvasBlock) {
@@ -872,12 +1126,14 @@ function isDecision(value: string): value is FeedbackDecision {
   return value === "accepted" || value === "needs_changes" || value === "comment_only";
 }
 
-function resolveHubPath(raw: string) {
+function absoluteImageURL(raw: string | undefined) {
   if (!raw) return "";
-  if (/^https?:\/\//.test(raw) || raw.startsWith("data:")) return raw;
-  if (raw.startsWith("/v1/")) return raw.replace(/^\/v1/, "/api/hub");
-  if (raw.startsWith("/")) return `/api/hub${raw}`;
-  return raw;
+  try {
+    const url = new URL(raw.trim());
+    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : "";
+  } catch {
+    return "";
+  }
 }
 
 function requireOK(response: Response) {

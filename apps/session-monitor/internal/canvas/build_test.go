@@ -119,6 +119,25 @@ func TestBuildCanvasRecentSessionsNewestFirst(t *testing.T) {
 			t.Fatalf("recent session subtitle missing %q:\n%s", want, subtitle)
 		}
 	}
+	for key, want := range map[string]string{
+		"sessionId":      "newer-session",
+		"updatedAt":      "2026-04-29T11:55:00Z",
+		"attention":      "idle",
+		"purpose":        "Newer session",
+		"evidenceStatus": "pending",
+		"nextStep":       "Confirm the likely canvas/run link before treating this as attached.",
+		"planLabel":      "Review state plan (proposed)",
+	} {
+		if got := core.StringValue(items[0][key]); got != want {
+			t.Fatalf("collection item field %s = %q, want %q", key, got, want)
+		}
+	}
+	if got := core.StringValue(items[0]["currentState"]); !strings.Contains(got, "idle, active") || !strings.Contains(got, "assistant: newer message") {
+		t.Fatalf("unexpected currentState field: %q", got)
+	}
+	if got, ok := items[0]["artifactCount"].(int); !ok || got != 0 {
+		t.Fatalf("unexpected artifactCount field: %#v", items[0]["artifactCount"])
+	}
 	badges, ok := items[0]["badges"].([]string)
 	if !ok || strings.Join(badges, "|") != "claude|idle|active|likely|attention:idle|evidence:pending|plan" {
 		t.Fatalf("unexpected collection badges: %#v", items[0]["badges"])
