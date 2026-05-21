@@ -21,6 +21,7 @@ Bindings expected by `wrangler.jsonc`:
 
 - `DB`: D1 database named `knify_agentcanvas_hub`.
 - `ASSETS_BUCKET`: R2 bucket named `knify-agentcanvas-hub-assets`.
+- `AGENTCANVAS_ASSET_PUBLIC_BASE_URL`: public R2 bucket base URL. Image blocks are decorated as `<base>/assets/<assetId>`.
 - `EVENTS`: Durable Object namespace backed by `EventHub`.
 - `FEEDBACK_QUEUE`: Queue named `knify-agentcanvas-feedback-deliveries`.
 

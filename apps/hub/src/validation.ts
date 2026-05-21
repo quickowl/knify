@@ -16,9 +16,11 @@ import type {
   FeedbackDecision,
   FeedbackDelivery,
   FeedbackTarget,
+  HtmlSandbox,
   Priority,
   ViewerLinkRequest
 } from "./types";
+import { HTML_BLOCK_MAX_BYTES, HTML_BLOCK_MAX_HEIGHT } from "./types";
 import { badRequest, conflict, firstNonEmpty, newID, nowISO, parseJSONDate, stripUndefined, validateID } from "./utils";
 
 export const CANVAS_BUNDLE_SCHEMA_VERSION = "agentcanvas.canvas-bundle.v1";
@@ -43,12 +45,14 @@ const blockKinds = new Set([
   "link",
   "metadata",
   "video",
+  "html",
   "collection",
   "form",
   "orderable-list",
   "split",
   "rule-builder"
 ]);
+const htmlSandboxes = new Set<HtmlSandbox>(["strict", "relaxed"]);
 const canvasEventTypes = new Set(["canvas.started", "canvas.summary.updated", "canvas.block.appended", "canvas.block.replaced", "canvas.block.removed", "canvas.completed"]);
 const feedbackDecisions = new Set<FeedbackDecision>(["accepted", "needs_changes", "comment_only"]);
 const agentProviders = new Set<AgentProvider>(["webhook", "generic_cloud", "cursor", "cursor_cli", "codex", "codex_exec", "claude", "claude_cli"]);
@@ -102,6 +106,24 @@ export function normalizeBlock(input: Partial<Block>, index = 0): Block {
     block.items = (block.items || []).map((item) => ({ ...item, checked: item.checked ?? false }));
   }
   if (block.kind === "video" && !block.sourceUrl?.trim()) badRequest(`video block ${JSON.stringify(block.id)} requires sourceUrl`);
+  if (block.kind === "html") {
+    if (block.screenshotAssetId !== undefined) validateID("html block screenshot asset id", block.screenshotAssetId);
+    const hasInline = typeof block.html === "string" && block.html.length > 0;
+    const hasScreenshot = !!block.screenshotAssetId;
+    if (!hasInline && !hasScreenshot) badRequest(`html block ${JSON.stringify(block.id)} requires html or screenshotAssetId`);
+    if (hasInline && byteLength(block.html!) > HTML_BLOCK_MAX_BYTES) {
+      badRequest(`html block ${JSON.stringify(block.id)} html exceeds ${HTML_BLOCK_MAX_BYTES} bytes`);
+    }
+    if (block.sandbox !== undefined && !htmlSandboxes.has(block.sandbox)) {
+      badRequest(`html block ${JSON.stringify(block.id)} has unsupported sandbox ${JSON.stringify(block.sandbox)}`);
+    }
+    if (block.height !== undefined) {
+      if (!Number.isFinite(block.height) || block.height <= 0 || block.height > HTML_BLOCK_MAX_HEIGHT) {
+        badRequest(`html block ${JSON.stringify(block.id)} height must be between 1 and ${HTML_BLOCK_MAX_HEIGHT}`);
+      }
+    }
+    if (block.screenshotUrl !== undefined) block.screenshotUrl = undefined;
+  }
   if (block.kind === "collection") {
     block.mode = block.mode || "paged-grid-rail";
     if (block.mode !== "paged-grid-rail" && block.mode !== "paged-list") badRequest(`collection block ${JSON.stringify(block.id)} has unsupported mode ${JSON.stringify(block.mode)}`);
@@ -481,11 +503,36 @@ export function normalizeViewerLinkRequest(req: ViewerLinkRequest, defaultBaseUR
 }
 
 export function canvasReferencesAsset(canvas: Canvas, assetID: string): boolean {
-  return canvas.blocks.some((block) => block.assetId === assetID || block.thumbnailAssetId === assetID);
+  return canvas.blocks.some((block) => block.assetId === assetID || block.thumbnailAssetId === assetID || block.screenshotAssetId === assetID);
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }
 
 export function sanitizeCanvasForViewer(canvas: Canvas): Canvas {
   const clone = structuredClone(canvas);
   delete clone.callback;
+  return clone;
+}
+
+export function publicAssetURL(assetPublicBaseURL: string | undefined, assetID: string): string | undefined {
+  const base = (assetPublicBaseURL || "").trim().replace(/\/+$/, "");
+  if (!base) return undefined;
+  return `${base}/assets/${encodeURIComponent(assetID)}`;
+}
+
+export function decorateCanvasAssetURLs(canvas: Canvas, assetPublicBaseURL: string | undefined): Canvas {
+  const clone = structuredClone(canvas);
+  const base = (assetPublicBaseURL || "").trim();
+  if (!base) return clone;
+  for (const block of clone.blocks) {
+    if (block.kind === "image" && block.assetId && !block.url) {
+      block.url = publicAssetURL(base, block.assetId);
+    }
+    if (block.kind === "html" && block.screenshotAssetId && !block.screenshotUrl) {
+      block.screenshotUrl = publicAssetURL(base, block.screenshotAssetId);
+    }
+  }
   return clone;
 }

@@ -31,6 +31,7 @@ Every block carries:
 | `link` | External or internal URL card | `url`, `title`, `caption`, `thumbnailUrl`, `thumbnailAssetId` |
 | `metadata` | A small grid of key/value rows | `metadata` map |
 | `video` | Embedded video | `assetId` OR `url`, `platform`, `duration`, `thumbnailUrl`, `thumbnailAssetId`, `posterAlt` |
+| `html` | Free‑form rendered HTML | `html` (inline body, sandboxed) OR `screenshotAssetId` (rendered fallback image); optional `sandbox`, `height`, `caption` |
 | `collection` | A list of mixed items | `items: ChecklistItem[]` (used as item rows), `pageSize` |
 | `form` | A small input form | `fields: FormField[]` |
 | `orderable-list` | A list with drag‑to‑reorder | `orderableItems: OrderableItem[]`, optional `itemEditor: FormSchema`, optional `total` |
@@ -52,6 +53,22 @@ The reference web viewer renders such blocks as a `<UnknownBlock>` card with the
 ## Edit ops and block kinds
 
 `POST /v1/canvases/:id/edits` (see [lifecycle.mdx#canvas-edits](./lifecycle.mdx#canvas-edits)) carries ops that target specific block kinds. The HUB MUST validate kind/op compatibility via `opRequiresBlockKind`. A consumer that authors edits MUST consult [apps/hub/src/validation.ts](https://github.com/quickowl/knify/blob/main/apps/hub/src/validation.ts) for the current op→kind mapping; a future MINOR bump SHOULD lift that mapping into this document.
+
+## HTML blocks {#html}
+
+The `html` kind lets an agent emit a free‑form rendered view — a small report, a chart, an annotated screenshot, or any HTML fragment a reviewer should see verbatim. Two carriers are supported, and a block MAY include either or both:
+
+- `html` — an inline HTML body, capped at 256 KiB. VIEWERS MUST render it inside a sandboxed iframe using `srcdoc`. The default `sandbox` is `strict` (no allowances). `sandbox: "relaxed"` MAY grant `allow-scripts`; a VIEWER MUST NOT grant `allow-same-origin` or `allow-top-navigation` for either mode.
+- `screenshotAssetId` — an image asset (typically a PNG/JPEG of the rendered HTML). The HUB MUST validate that the asset exists in the bound canvas's workspace and SHOULD decorate the block with a public `screenshotUrl` when an asset CDN is configured. VIEWERS MUST display this image as a fallback when `html` is absent or when execution is blocked by viewer policy.
+
+Other fields:
+
+- `title`, `caption` — same conventions as `image`.
+- `height` — initial iframe height in CSS pixels, 1–1600; VIEWERS MAY clamp.
+
+A block with neither `html` nor `screenshotAssetId` is invalid and the HUB MUST reject it with HTTP 400.
+
+Agents SHOULD prefer `html` when reviewers benefit from interactive content (sortable tables, hover details, sparklines) and SHOULD include `screenshotAssetId` whenever a frozen visual record is also useful — for example, post‑run reports archived after the live session ends.
 
 ## Assets
 

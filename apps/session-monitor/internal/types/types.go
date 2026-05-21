@@ -16,6 +16,7 @@ const (
 	DefaultStaleAfter   = 3 * time.Minute
 	MaxSessionArtifacts = 5
 	TextArtifactCap     = 16 * 1024
+	HTMLArtifactCap     = 256 * 1024
 	ImageArtifactCap    = 20 * 1024 * 1024
 )
 
@@ -121,16 +122,17 @@ type LocalSession struct {
 }
 
 type SessionArtifact struct {
-	ID          string `json:"id"`
-	Kind        string `json:"kind"`
-	Title       string `json:"title"`
-	Source      string `json:"source"`
-	Path        string `json:"path,omitempty"`
-	URL         string `json:"url,omitempty"`
-	AssetID     string `json:"assetId,omitempty"`
-	ContentType string `json:"contentType,omitempty"`
-	Size        int64  `json:"size,omitempty"`
-	Summary     string `json:"summary,omitempty"`
+	ID                string `json:"id"`
+	Kind              string `json:"kind"`
+	Title             string `json:"title"`
+	Source            string `json:"source"`
+	Path              string `json:"path,omitempty"`
+	URL               string `json:"url,omitempty"`
+	AssetID           string `json:"assetId,omitempty"`
+	ContentType       string `json:"contentType,omitempty"`
+	Size              int64  `json:"size,omitempty"`
+	Summary           string `json:"summary,omitempty"`
+	ScreenshotAssetID string `json:"screenshotAssetId,omitempty"`
 }
 
 type MessageSummary struct {

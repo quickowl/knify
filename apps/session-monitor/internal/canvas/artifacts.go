@@ -46,13 +46,33 @@ func artifactBlock(blockID string, artifact types.SessionArtifact) map[string]an
 		}
 		if artifact.AssetID != "" {
 			block["assetId"] = artifact.AssetID
-			return block
 		}
 		if artifact.URL != "" {
 			block["url"] = artifact.URL
+		}
+		if artifact.AssetID != "" || artifact.URL != "" {
 			return block
 		}
 		return artifactMetadataBlock(blockID, artifact, "Image artifact is not available in Hub asset storage.")
+	case "html":
+		body := htmlArtifactBody(artifact)
+		if body == "" && artifact.ScreenshotAssetID == "" {
+			return artifactMetadataBlock(blockID, artifact, "HTML artifact has no inline body and no screenshot asset.")
+		}
+		block := map[string]any{
+			"id":      blockID,
+			"kind":    "html",
+			"title":   core.FirstNonEmpty(artifact.Title, "HTML artifact"),
+			"caption": artifactCaption(artifact),
+			"sandbox": "strict",
+		}
+		if body != "" {
+			block["html"] = body
+		}
+		if artifact.ScreenshotAssetID != "" {
+			block["screenshotAssetId"] = artifact.ScreenshotAssetID
+		}
+		return block
 	case "canvas":
 		return map[string]any{
 			"id":       blockID,
@@ -115,6 +135,26 @@ func artifactText(artifact types.SessionArtifact) string {
 	text := string(data)
 	if len(text) > types.TextArtifactCap {
 		return text[:types.TextArtifactCap] + "\n\n... artifact truncated ..."
+	}
+	return text
+}
+
+func htmlArtifactBody(artifact types.SessionArtifact) string {
+	if artifact.Path == "" {
+		return core.FirstNonEmpty(artifact.Summary, "")
+	}
+	file, err := os.Open(artifact.Path)
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, int64(types.HTMLArtifactCap)+1))
+	if err != nil {
+		return ""
+	}
+	text := string(data)
+	if len(text) > types.HTMLArtifactCap {
+		return text[:types.HTMLArtifactCap]
 	}
 	return text
 }

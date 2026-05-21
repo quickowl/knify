@@ -12,7 +12,7 @@ import (
 	"github.com/quickowl/knify/apps/session-monitor/internal/types"
 )
 
-var artifactMentionPattern = regexp.MustCompile(`(?i)(https?://[^\s\])}>,"']+\.(?:md|markdown|log|txt|png|jpe?g|webp)(?:\?[^\s\])}>,"']*)?|(?:~|\.{1,2}/|/|[A-Za-z0-9_.-]+/)?[A-Za-z0-9_.@%+/\-]+?\.(?:md|markdown|log|txt|png|jpe?g|webp))`)
+var artifactMentionPattern = regexp.MustCompile(`(?i)(https?://[^\s\])}>,"']+\.(?:md|markdown|log|txt|png|jpe?g|webp|html?)(?:\?[^\s\])}>,"']*)?|(?:~|\.{1,2}/|/|[A-Za-z0-9_.-]+/)?[A-Za-z0-9_.@%+/\-]+?\.(?:md|markdown|log|txt|png|jpe?g|webp|html?))`)
 
 const artifactTextScanCap = 64 * 1024
 
@@ -118,6 +118,8 @@ func artifactKind(path string) string {
 		return "terminal"
 	case ".png", ".jpg", ".jpeg", ".webp":
 		return "image"
+	case ".html", ".htm":
+		return "html"
 	default:
 		return ""
 	}
@@ -129,6 +131,8 @@ func artifactContentType(path string) string {
 		return "text/markdown; charset=utf-8"
 	case ".log", ".txt":
 		return "text/plain; charset=utf-8"
+	case ".html", ".htm":
+		return "text/html; charset=utf-8"
 	}
 	if got := mime.TypeByExtension(filepath.Ext(path)); got != "" {
 		return got

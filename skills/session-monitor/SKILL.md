@@ -39,6 +39,17 @@ For flags and environment variables, use `apps/session-monitor/README.md`.
 
 For screenshot-based UX review of the session monitor, spawn a Codex subagent with `visual-decision-reviewer.md` as the reviewer prompt. The reviewer reports back to the current thread; it does not submit Hub feedback, auto-nudge sessions, or write provider state.
 
+## Artifact kinds the monitor passes through
+
+The monitor classifies files referenced in assistant output and turns them into typed canvas blocks. Today's mapping (see `internal/scan/artifacts.go`):
+
+- `.md` / `.markdown` → `markdown` block
+- `.log` / `.txt` → `terminal` block
+- `.png` / `.jpg` / `.jpeg` / `.webp` → `image` block (uploaded to Hub asset storage)
+- `.html` / `.htm` → `html` block (inline body, sandbox `strict`, capped at 256 KiB)
+
+When you want an agent to surface a rich, reviewable view (a small report, a styled summary, an annotated screenshot), have it write an `.html` file under the session CWD. The monitor will read it, cap it, and emit a sandboxed `html` block on the live canvas. A reviewer can also pair it with a screenshot — set `SessionArtifact.ScreenshotAssetID` to a pre-uploaded image asset and the rendered fallback shows when inline execution is blocked.
+
 ## Deployment Through `npx skills`
 
 Use the root Make targets so the command sequence stays consistent:

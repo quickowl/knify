@@ -2,7 +2,7 @@ import type { AuthContext, Canvas, HubEnv, HubEvent, ViewerSession } from "./typ
 import type { Store } from "./store";
 import { D1Store } from "./store";
 import { newID, nowISO, workspaceVisible } from "./utils";
-import { sanitizeCanvasForViewer } from "./validation";
+import { decorateCanvasAssetURLs, sanitizeCanvasForViewer } from "./validation";
 
 export interface EventBus {
   publish(event: HubEvent): Promise<void>;
@@ -104,15 +104,19 @@ export class EventHub implements DurableObject {
       const viewer = url.searchParams.get("viewer") === "1";
       const store = new D1Store(this.env.DB, this.env.ASSETS_BUCKET);
       const subscribers = this.subscribers;
+      const assetPublicBaseURL = this.env.AGENTCANVAS_ASSET_PUBLIC_BASE_URL;
       const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
           controller.enqueue(new TextEncoder().encode(": connected\n\n"));
           if (canvasId) {
-            const canvas = await store.getCanvas(canvasId);
+            const canvas = decorateCanvasAssetURLs(await store.getCanvas(canvasId), assetPublicBaseURL);
             controller.enqueue(encodeFrame({ type: "canvas.updated", canvasId: canvas.id, data: viewer ? sanitizeCanvasForViewer(canvas) : canvas, createdAt: nowISO() }));
           } else {
             const canvases = (await store.listCanvases()).filter((canvas) => workspaceVisible(canvas.workspaceId, workspaceId));
-            for (const canvas of canvases) controller.enqueue(encodeFrame({ type: "canvas.updated", canvasId: canvas.id, data: canvas, createdAt: nowISO() }));
+            for (const rawCanvas of canvases) {
+              const canvas = decorateCanvasAssetURLs(rawCanvas, assetPublicBaseURL);
+              controller.enqueue(encodeFrame({ type: "canvas.updated", canvasId: canvas.id, data: canvas, createdAt: nowISO() }));
+            }
           }
           const id = newID("subscriber");
           subscribers.set(id, { controller, workspaceId, canvasId, viewer });

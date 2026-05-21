@@ -12,15 +12,16 @@ func TestExtractArtifactsFromAssistantText(t *testing.T) {
 	mustWriteFile(t, filepath.Join(cwd, "review.md"), "# Review\n")
 	mustWriteFile(t, filepath.Join(cwd, "logs", "cli.log"), "ok\n")
 	mustWriteFile(t, filepath.Join(cwd, "screens", "feature.png"), "png")
+	mustWriteFile(t, filepath.Join(cwd, "reports", "page.html"), "<h1>ok</h1>")
 
-	artifacts := extractArtifactsFromText("Published `review.md`, `logs/cli.log`, and screenshot screens/feature.png.", cwd, "assistant")
-	if len(artifacts) != 3 {
-		t.Fatalf("expected 3 artifacts, got %#v", artifacts)
+	artifacts := extractArtifactsFromText("Published `review.md`, `logs/cli.log`, screenshot screens/feature.png and report reports/page.html.", cwd, "assistant")
+	if len(artifacts) != 4 {
+		t.Fatalf("expected 4 artifacts, got %#v", artifacts)
 	}
-	if artifacts[0].Kind != "markdown" || artifacts[1].Kind != "terminal" || artifacts[2].Kind != "image" {
+	if artifacts[0].Kind != "markdown" || artifacts[1].Kind != "terminal" || artifacts[2].Kind != "image" || artifacts[3].Kind != "html" {
 		t.Fatalf("unexpected artifact kinds: %#v", artifacts)
 	}
-	if artifacts[0].Path != filepath.Join(cwd, "review.md") || artifacts[2].ContentType != "image/png" {
+	if artifacts[0].Path != filepath.Join(cwd, "review.md") || artifacts[2].ContentType != "image/png" || artifacts[3].ContentType != "text/html; charset=utf-8" {
 		t.Fatalf("unexpected artifact metadata: %#v", artifacts)
 	}
 }

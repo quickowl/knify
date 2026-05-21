@@ -113,8 +113,7 @@ func uploadImageArtifacts(ctx context.Context, cfg types.Config, session *types.
 			*warnings = append(*warnings, fmt.Sprintf("evidence open image %s: %v", artifact.Path, err))
 			continue
 		}
-		assetID := imageAssetID(*session, *artifact)
-		response, err := hub.UploadAsset(ctx, cfg, assetID, core.FirstNonEmpty(artifact.ContentType, "application/octet-stream"), file)
+		response, err := hub.UploadAsset(ctx, cfg, core.FirstNonEmpty(artifact.ContentType, "application/octet-stream"), file)
 		closeErr := file.Close()
 		if err != nil {
 			*warnings = append(*warnings, fmt.Sprintf("evidence upload image %s: %v", artifact.Path, err))
@@ -123,15 +122,10 @@ func uploadImageArtifacts(ctx context.Context, cfg types.Config, session *types.
 		if closeErr != nil && !errors.Is(closeErr, os.ErrClosed) {
 			*warnings = append(*warnings, fmt.Sprintf("evidence close image %s: %v", artifact.Path, closeErr))
 		}
-		artifact.AssetID = core.FirstNonEmpty(response.AssetID, response.ID, assetID)
-		artifact.URL = core.FirstNonEmpty(response.URL, "/v1/assets/"+artifact.AssetID)
+		artifact.AssetID = core.FirstNonEmpty(response.AssetID, response.ID)
+		artifact.URL = response.URL
 		artifact.Summary = "uploaded to Hub asset storage"
 	}
-}
-
-func imageAssetID(session types.LocalSession, artifact types.SessionArtifact) string {
-	key := strings.Join([]string{session.Provider, session.SessionID, artifact.Path, fmt.Sprint(artifact.Size)}, "\n")
-	return "asset.session-monitor." + core.ShortHash(key)
 }
 
 func dedupeArtifacts(items []types.SessionArtifact) []types.SessionArtifact {

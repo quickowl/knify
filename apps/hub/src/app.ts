@@ -1,6 +1,7 @@
 import type {
   AgentEvent,
   AgentRun,
+  Asset,
   AuthContext,
   Canvas,
   CanvasEdit,
@@ -28,6 +29,7 @@ import {
   SNAPSHOT_MANUAL,
   SNAPSHOT_STATIC_OVERWRITE,
   canvasReferencesAsset,
+  decorateCanvasAssetURLs,
   normalizeAgentEvent,
   normalizeAgentRun,
   normalizeCanvas,
@@ -37,6 +39,7 @@ import {
   normalizeFeedbackDelivery,
   normalizeViewerLinkRequest,
   opRequiresBlockKind,
+  publicAssetURL,
   sanitizeCanvasForViewer,
   validAgentProvider,
   validBlockKind
@@ -51,6 +54,7 @@ import {
   hmacSHA256Hex,
   jsonResponse,
   newID,
+  newOpaqueID,
   notFound,
   nowISO,
   parseBool,
@@ -189,7 +193,7 @@ class HubApp {
       }
       await this.store.saveCanvas(canvas);
       await this.publish({ type: eventType, canvasId: canvas.id, data: canvas });
-      return jsonResponse(canvas, 201);
+      return jsonResponse(this.canvasForResponse(canvas), 201);
     }
     if (request.method === "GET") {
       const url = new URL(request.url);
@@ -198,7 +202,7 @@ class HubApp {
       const runID = firstNonEmpty(url.searchParams.get("runId") || "", url.searchParams.get("run_id") || "");
       const status = url.searchParams.get("status") || "";
       canvases = canvases.filter((canvas) => (!agentID || canvas.agentId === agentID) && (!runID || canvas.runId === runID) && (!status || canvas.status === status));
-      return jsonResponse(canvases);
+      return jsonResponse(canvases.map((canvas) => this.canvasForResponse(canvas)));
     }
     return methodNotAllowed();
   }
@@ -208,7 +212,7 @@ class HubApp {
     const canvasID = pathID(parts[2]);
     if (parts.length === 3) {
       if (request.method !== "GET") return methodNotAllowed();
-      return jsonResponse(await this.getCanvasForAuth(canvasID, auth));
+      return jsonResponse(this.canvasForResponse(await this.getCanvasForAuth(canvasID, auth)));
     }
     const leaf = parts[3];
     if (parts.length === 4 && leaf === "feedback") {
@@ -235,7 +239,7 @@ class HubApp {
       await this.publish({ type: "canvas.snapshot.created", canvasId: canvasID, data: response.checkpoint });
       await this.publish({ type: "canvas.restored", canvasId: canvasID, data: response });
       await this.publish({ type: "canvas.updated", canvasId: canvasID, data: response.canvas });
-      return jsonResponse(response);
+      return jsonResponse({ ...response, canvas: this.canvasForResponse(response.canvas) });
     }
     return jsonResponse({ error: "not found" }, 404);
   }
@@ -265,7 +269,7 @@ class HubApp {
           await this.publish({ type: "canvas.snapshot.created", canvasId: canvasID, data: snapshot });
         }
       }
-      return jsonResponse(canvas, 201);
+      return jsonResponse(this.canvasForResponse(canvas), 201);
     }
     if (request.method === "GET") {
       await this.getCanvasForAuth(canvasID, auth);
@@ -306,7 +310,7 @@ class HubApp {
     if (result.checkpoint) await this.publish({ type: "canvas.snapshot.created", canvasId: result.canvas.id, data: result.checkpoint });
     await this.publish({ type: "canvas.imported", canvasId: result.canvas.id, data: result });
     await this.publish({ type: result.checkpoint ? "canvas.updated" : "canvas.created", canvasId: result.canvas.id, data: result.canvas });
-    return jsonResponse(result, 201);
+    return jsonResponse({ ...result, canvas: this.canvasForResponse(result.canvas) }, 201);
   }
 
   private async handleCanvasEdits(request: Request, canvasID: string, auth: AuthContext): Promise<Response> {
@@ -368,16 +372,16 @@ class HubApp {
 
   private async handleAssets(request: Request, auth: AuthContext): Promise<Response> {
     if (request.method !== "POST") return methodNotAllowed();
-    const id = new URL(request.url).searchParams.get("id") || newID("asset");
+    const id = newOpaqueID("asset");
     const asset = await this.store.saveAsset(id, request.headers.get("Content-Type") || "application/octet-stream", request.body || new Uint8Array(), auth.workspaceId || "");
-    return jsonResponse({ assetId: asset.id, id: asset.id, contentType: asset.contentType, size: asset.size, url: `/v1/assets/${asset.id}`, createdAt: asset.createdAt }, 201);
+    return jsonResponse(this.assetUploadResponse(asset), 201);
   }
 
   private async handleAsset(request: Request, auth: AuthContext): Promise<Response> {
     const id = pathID(pathParts(new URL(request.url).pathname)[2]);
     if (request.method === "POST") {
       const asset = await this.store.saveAsset(id, request.headers.get("Content-Type") || "application/octet-stream", request.body || new Uint8Array(), auth.workspaceId || "");
-      return jsonResponse(asset, 201);
+      return jsonResponse(this.assetUploadResponse(asset), 201);
     }
     if (request.method === "GET") {
       const { asset, body } = await this.store.getAsset(id);
@@ -606,7 +610,7 @@ class HubApp {
     const path = new URL(request.url).pathname;
     if (path === "/v1/canvases") {
       if (request.method !== "GET") return methodNotAllowed();
-      return jsonResponse([sanitizeCanvasForViewer(await this.store.getCanvas(session.canvasId))], 200, viewerHeaders());
+      return jsonResponse([this.viewerCanvasForResponse(await this.store.getCanvas(session.canvasId))], 200, viewerHeaders());
     }
     if (path === "/v1/events") {
       if (!hasCapability(session.capabilities, "canvas.live")) forbidden("viewer session cannot stream live events");
@@ -630,7 +634,7 @@ class HubApp {
       if (canvasID !== session.canvasId) forbidden("viewer session cannot access this canvas");
       if (parts.length === 3) {
         if (request.method !== "GET") return methodNotAllowed();
-        return jsonResponse(sanitizeCanvasForViewer(await this.store.getCanvas(canvasID)), 200, viewerHeaders());
+        return jsonResponse(this.viewerCanvasForResponse(await this.store.getCanvas(canvasID)), 200, viewerHeaders());
       }
       if (parts.length === 4 && parts[3] === "feedback") {
         if (!hasCapability(session.capabilities, "feedback.submit")) forbidden("viewer session cannot submit feedback");
@@ -925,7 +929,7 @@ class HubApp {
       capabilities: link.capabilities,
       sessionToken: viewerCode(session.id, sessionSecret),
       expiresAt: session.expiresAt,
-      canvas: sanitizeCanvasForViewer(canvas)
+      canvas: this.viewerCanvasForResponse(canvas)
     };
   }
 
@@ -1001,13 +1005,37 @@ class HubApp {
     return (this.env.AGENTCANVAS_LINK_BASE_URL as string | undefined) || defaultViewerLinkBaseURL;
   }
 
+  private assetPublicBaseURL(): string {
+    return (this.env.AGENTCANVAS_ASSET_PUBLIC_BASE_URL as string | undefined) || "";
+  }
+
+  private assetUploadResponse(asset: Asset) {
+    return stripUndefined({
+      assetId: asset.id,
+      id: asset.id,
+      contentType: asset.contentType,
+      size: asset.size,
+      url: publicAssetURL(this.assetPublicBaseURL(), asset.id),
+      createdAt: asset.createdAt
+    });
+  }
+
+  private canvasForResponse(canvas: Canvas): Canvas {
+    return decorateCanvasAssetURLs(canvas, this.assetPublicBaseURL());
+  }
+
+  private viewerCanvasForResponse(canvas: Canvas): Canvas {
+    return sanitizeCanvasForViewer(this.canvasForResponse(canvas));
+  }
+
   private isPublicViewerExchange(path: string): boolean {
     const parts = pathParts(path);
     return parts.length === 4 && parts[0] === "v1" && parts[1] === "viewer-links" && parts[3] === "exchange";
   }
 
   private async publish(event: Parameters<EventBus["publish"]>[0]): Promise<void> {
-    await this.bus.publish({ ...event, createdAt: event.createdAt || this.now() });
+    const data = isCanvasPayload(event.data) ? this.canvasForResponse(event.data) : event.data;
+    await this.bus.publish({ ...event, data, createdAt: event.createdAt || this.now() });
   }
 
   private secretFromAuthRef(authRef: string | undefined): string {
@@ -1058,6 +1086,10 @@ function pathID(raw: string | undefined): string {
     badRequest("invalid escaped id");
   }
   return validateID("id", decoded);
+}
+
+function isCanvasPayload(value: unknown): value is Canvas {
+  return !!value && typeof value === "object" && Array.isArray((value as Canvas).blocks);
 }
 
 function methodNotAllowed(): Response {

@@ -172,10 +172,10 @@ func FetchHubCanvas(ctx context.Context, cfg types.Config, canvasID string) (typ
 	return canvas, true, nil
 }
 
-func UploadAsset(ctx context.Context, cfg types.Config, id, contentType string, body io.Reader) (AssetUploadResponse, error) {
+func UploadAsset(ctx context.Context, cfg types.Config, contentType string, body io.Reader) (AssetUploadResponse, error) {
 	ctx, cancel := context.WithTimeout(ctx, types.HubRequestTimeout)
 	defer cancel()
-	url := strings.TrimRight(cfg.HubURL, "/") + "/v1/assets/" + id
+	url := strings.TrimRight(cfg.HubURL, "/") + "/v1/assets"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, body)
 	if err != nil {
 		return AssetUploadResponse{}, err
@@ -192,7 +192,7 @@ func UploadAsset(ctx context.Context, cfg types.Config, id, contentType string, 
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return AssetUploadResponse{}, fmt.Errorf("POST /v1/assets/%s returned %d: %s", id, resp.StatusCode, strings.TrimSpace(string(data)))
+		return AssetUploadResponse{}, fmt.Errorf("POST /v1/assets returned %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	var response AssetUploadResponse
 	if err := json.Unmarshal(data, &response); err != nil {

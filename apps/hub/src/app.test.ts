@@ -79,6 +79,55 @@ describe("AgentCanvas Worker hub", () => {
     expect(await readJSON<unknown>(feedback)).toMatchObject({ canvasId: "canvas-http", deliveryStatus: "delivered" });
   });
 
+  it("accepts html blocks, validates them, and decorates screenshot asset urls", async () => {
+    const h = makeHarness(undefined, { AGENTCANVAS_ASSET_PUBLIC_BASE_URL: "https://pub.example.r2.dev/" } as Partial<HubEnv>);
+
+    const inline = testCanvas("canvas-html-inline");
+    inline.blocks = [{ id: "html-1", kind: "html", html: "<p>hi</p>", sandbox: "strict", height: 240, title: "Snippet" }];
+    expect((await h.json("/v1/canvases", inline)).status).toBe(201);
+
+    const shot = await readJSON<{ assetId: string; url: string }>(await h.fetch("/v1/assets", { method: "POST", headers: { "Content-Type": "image/png" }, body: "png" }));
+    const screenshot = testCanvas("canvas-html-screenshot");
+    screenshot.blocks = [{ id: "html-2", kind: "html", screenshotAssetId: shot.assetId, caption: "Rendered HTML" }];
+    expect((await h.json("/v1/canvases", screenshot)).status).toBe(201);
+
+    const got = await readJSON<Canvas>(await h.fetch("/v1/canvases/canvas-html-screenshot"));
+    expect(got.blocks[0]).toMatchObject({ screenshotAssetId: shot.assetId, screenshotUrl: shot.url });
+    expect((await h.store.getCanvas("canvas-html-screenshot")).blocks[0].screenshotUrl).toBeUndefined();
+
+    const missing = testCanvas("canvas-html-missing");
+    missing.blocks = [{ id: "html-bad", kind: "html" }];
+    expect((await h.json("/v1/canvases", missing)).status).toBe(400);
+
+    const tooBig = testCanvas("canvas-html-big");
+    tooBig.blocks = [{ id: "html-big", kind: "html", html: "x".repeat(300_000) }];
+    expect((await h.json("/v1/canvases", tooBig)).status).toBe(400);
+
+    const badSandbox = testCanvas("canvas-html-sandbox");
+    badSandbox.blocks = [{ id: "html-sb", kind: "html", html: "<p>hi</p>", sandbox: "wide-open" as never }];
+    expect((await h.json("/v1/canvases", badSandbox)).status).toBe(400);
+  });
+
+  it("returns opaque public asset URLs and decorates image blocks on read", async () => {
+    const h = makeHarness(undefined, { AGENTCANVAS_ASSET_PUBLIC_BASE_URL: "https://pub.example.r2.dev/" } as Partial<HubEnv>);
+    const uploaded = await readJSON<{ assetId: string; id: string; url: string }>(await h.fetch("/v1/assets", { method: "POST", headers: { "Content-Type": "image/png" }, body: "png" }));
+    expect(uploaded.assetId).toMatch(/^asset-[a-f0-9]{32}$/);
+    expect(uploaded.id).toBe(uploaded.assetId);
+    expect(uploaded.url).toBe(`https://pub.example.r2.dev/assets/${uploaded.assetId}`);
+
+    const canvas = testCanvas("canvas-image");
+    canvas.blocks = [{ id: "img-1", kind: "image", assetId: uploaded.assetId, alt: "screenshot" }];
+    expect((await h.json("/v1/canvases", canvas)).status).toBe(201);
+
+    const got = await readJSON<Canvas>(await h.fetch("/v1/canvases/canvas-image"));
+    expect(got.blocks[0]).toMatchObject({ assetId: uploaded.assetId, url: uploaded.url });
+    expect((await h.store.getCanvas("canvas-image")).blocks[0].url).toBeUndefined();
+
+    const asset = await h.fetch(`/v1/assets/${uploaded.assetId}`);
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toBe("png");
+  });
+
   it("scopes API keys by workspace while internal token sees all", async () => {
     const h = makeHarness(async (key) => {
       if (key === "knify-key-a") return { keyId: "key-a", workspaceId: "ws-a" };

@@ -49,10 +49,10 @@ func TestRunOncePublishesCanvasToHub(t *testing.T) {
 			_ = json.NewEncoder(w).Encode([]types.HubRun{})
 			return
 		}
-		if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/v1/assets/") {
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/assets" {
 			assetPosts++
-			id := strings.TrimPrefix(r.URL.Path, "/v1/assets/")
-			_ = json.NewEncoder(w).Encode(map[string]any{"assetId": id, "id": id, "contentType": r.Header.Get("Content-Type"), "url": "/v1/assets/" + id})
+			id := "asset-0123456789abcdef0123456789abcdef"
+			_ = json.NewEncoder(w).Encode(map[string]any{"assetId": id, "id": id, "contentType": r.Header.Get("Content-Type"), "url": "https://pub.example.r2.dev/assets/" + id})
 			return
 		}
 		http.NotFound(w, r)
@@ -81,7 +81,8 @@ func TestRunOncePublishesCanvasToHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if assetPosts != 1 || !strings.Contains(string(raw), `"assetId"`) || !strings.Contains(string(raw), "evidence:ready") {
+	rawCanvas := string(raw)
+	if assetPosts != 1 || !strings.Contains(rawCanvas, `"assetId"`) || !strings.Contains(rawCanvas, `"url":"https://pub.example.r2.dev/assets/asset-0123456789abcdef0123456789abcdef"`) || strings.Contains(rawCanvas, "/v1/assets/") || !strings.Contains(rawCanvas, "evidence:ready") {
 		t.Fatalf("expected uploaded image evidence, assetPosts=%d canvas=%s", assetPosts, raw)
 	}
 }

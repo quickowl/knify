@@ -652,6 +652,8 @@ function renderBlock(
       const alt = readBlockValue<string>(block, "alt") || "Canvas image";
       return <figure className="hub-image">{url ? <img src={url} alt={alt} /> : <div className="hub-image-placeholder">{alt}</div>}{readBlockValue<string>(block, "caption") ? <figcaption>{readBlockValue<string>(block, "caption")}</figcaption> : null}</figure>;
     }
+    case "html":
+      return <HtmlBlock block={block} />;
     case "metadata":
       return <MetadataBlock block={block} />;
     default:
@@ -991,6 +993,38 @@ function DiffBlock({ block }: { block: CanvasBlock }) {
       <strong>{readBlockValue<string>(block, "filePath") || readBlockValue<string>(block, "title") || "Diff"}</strong>
       <pre>{lines.map((line, index) => <span className={line.startsWith("+") ? "add" : line.startsWith("-") ? "del" : ""} key={`${line}-${index}`}>{line}</span>)}</pre>
     </div>
+  );
+}
+
+function HtmlBlock({ block }: { block: CanvasBlock }) {
+  const html = readBlockValue<string>(block, "html");
+  const screenshotUrl = absoluteImageURL(readBlockValue<string>(block, "screenshotUrl"));
+  const title = readBlockValue<string>(block, "title");
+  const caption = readBlockValue<string>(block, "caption");
+  const sandbox = readBlockValue<string>(block, "sandbox") === "relaxed" ? "allow-scripts" : "";
+  const requestedHeight = Number(readBlockValue<number>(block, "height") ?? 0);
+  const height = Number.isFinite(requestedHeight) && requestedHeight > 0 ? Math.min(Math.max(requestedHeight, 80), 1600) : 320;
+
+  return (
+    <figure className="hub-surface hub-html">
+      {title ? <strong>{title}</strong> : null}
+      {html ? (
+        <iframe
+          className="hub-html-frame"
+          title={title || `html block ${block.id}`}
+          srcDoc={html}
+          sandbox={sandbox}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          style={{ width: "100%", height, border: 0 }}
+        />
+      ) : screenshotUrl ? (
+        <img className="hub-html-screenshot" src={screenshotUrl} alt={title || "HTML screenshot"} />
+      ) : (
+        <div className="hub-image-placeholder">HTML block has no body or screenshot.</div>
+      )}
+      {caption ? <figcaption>{caption}</figcaption> : null}
+    </figure>
   );
 }
 

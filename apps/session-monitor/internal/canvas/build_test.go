@@ -155,8 +155,10 @@ func TestBuildCanvasIncludesEvidenceBlocksAndManualNudge(t *testing.T) {
 	root := t.TempDir()
 	mdPath := filepath.Join(root, "review.md")
 	logPath := filepath.Join(root, "cli.log")
+	htmlPath := filepath.Join(root, "report.html")
 	writeArtifactFile(t, mdPath, "# Review\n\nLooks good.\n")
 	writeArtifactFile(t, logPath, "go test ./...\nPASS\n")
+	writeArtifactFile(t, htmlPath, "<!doctype html><h1>Report</h1><p>Pixel drift under threshold.</p>")
 	ready := types.LocalSession{
 		Provider:  "codex",
 		SessionID: "ready-session",
@@ -167,7 +169,8 @@ func TestBuildCanvasIncludesEvidenceBlocksAndManualNudge(t *testing.T) {
 		Artifacts: []types.SessionArtifact{
 			{ID: "artifact-md", Kind: "markdown", Title: "review.md", Source: "assistant", Path: mdPath, ContentType: "text/markdown", Size: 20},
 			{ID: "artifact-log", Kind: "terminal", Title: "cli.log", Source: "assistant", Path: logPath, ContentType: "text/plain", Size: 20},
-			{ID: "artifact-img", Kind: "image", Title: "screen.png", Source: "assistant", AssetID: "asset.session-monitor.test", ContentType: "image/png", Summary: "uploaded"},
+			{ID: "artifact-img", Kind: "image", Title: "screen.png", Source: "assistant", AssetID: "asset.session-monitor.test", URL: "https://pub.example.r2.dev/assets/asset.session-monitor.test", ContentType: "image/png", Summary: "uploaded"},
+			{ID: "artifact-html", Kind: "html", Title: "report.html", Source: "assistant", Path: htmlPath, ContentType: "text/html", Size: 64},
 		},
 		Match: types.MatchResult{Status: "unmatched"},
 	}
@@ -194,7 +197,7 @@ func TestBuildCanvasIncludesEvidenceBlocksAndManualNudge(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"evidence:ready", "artifacts:3", "session-01-artifact-01", "Looks good.", "go test ./...", "asset.session-monitor.test", "Manual nudge", "claude -p --resume missing-session"} {
+	for _, want := range []string{"evidence:ready", "artifacts:4", "session-01-artifact-01", "Looks good.", "go test ./...", "asset.session-monitor.test", "https://pub.example.r2.dev/assets/asset.session-monitor.test", "Pixel drift under threshold.", `"kind":"html"`, `"sandbox":"strict"`, "Manual nudge", "claude -p --resume missing-session"} {
 		if !strings.Contains(string(raw), want) {
 			t.Fatalf("canvas missing %q:\n%s", want, raw)
 		}

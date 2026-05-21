@@ -13,11 +13,18 @@ export type BlockKind =
   | "link"
   | "metadata"
   | "video"
+  | "html"
   | "collection"
   | "form"
   | "orderable-list"
   | "split"
   | "rule-builder";
+
+export type HtmlSandbox = "strict" | "relaxed";
+
+export const HTML_BLOCK_MAX_BYTES = 256 * 1024;
+export const HTML_BLOCK_MAX_HEIGHT = 1600;
+export const HTML_BLOCK_DEFAULT_HEIGHT = 320;
 export type FeedbackDecision = "accepted" | "needs_changes" | "comment_only";
 export type DeliveryStatus = "pending" | "queued" | "retrying" | "delivered" | "failed" | "dead_lettered";
 export type AgentProvider = "webhook" | "generic_cloud" | "cursor" | "cursor_cli" | "codex" | "codex_exec" | "claude" | "claude_cli";
@@ -287,6 +294,11 @@ export interface Block {
   slices?: SplitSlice[];
   ruleSchema?: RuleSchema;
   clauses?: RuleClause[];
+  html?: string;
+  sandbox?: HtmlSandbox;
+  height?: number;
+  screenshotAssetId?: string;
+  screenshotUrl?: string;
 }
 
 export interface ChartSpec {
@@ -529,6 +541,7 @@ export interface HubEnv {
   HUB_TOKEN?: string;
   AGENTCANVAS_TOKEN?: string;
   CANVAS_HUB_TOKEN?: string;
+  AGENTCANVAS_ASSET_PUBLIC_BASE_URL?: string;
   AGENTCANVAS_LINK_BASE_URL?: string;
   AGENTCANVAS_CORS_ORIGINS?: string;
   AGENTCANVAS_UNKEY_ROOT_KEY?: string;
