@@ -2,6 +2,7 @@ diff/
 .build/
 .cache/
 reports/
+bench-out/
 *.log
 *.tmp
 *.out
