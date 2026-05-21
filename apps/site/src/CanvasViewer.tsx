@@ -648,7 +648,7 @@ function renderBlock(
       return <a className="hub-surface hub-link" href={url} target="_blank" rel="noreferrer"><strong>{readBlockValue<string>(block, "title") || url}</strong><ExternalLink size={15} /></a>;
     }
     case "image": {
-      const url = absoluteImageURL(readBlockValue<string>(block, "url"));
+      const url = resolveAssetSrc(readBlockValue<string>(block, "url"), readBlockValue<string>(block, "assetId"));
       const alt = readBlockValue<string>(block, "alt") || "Canvas image";
       return <figure className="hub-image">{url ? <img src={url} alt={alt} /> : <div className="hub-image-placeholder">{alt}</div>}{readBlockValue<string>(block, "caption") ? <figcaption>{readBlockValue<string>(block, "caption")}</figcaption> : null}</figure>;
     }
@@ -998,7 +998,7 @@ function DiffBlock({ block }: { block: CanvasBlock }) {
 
 function HtmlBlock({ block }: { block: CanvasBlock }) {
   const html = readBlockValue<string>(block, "html");
-  const screenshotUrl = absoluteImageURL(readBlockValue<string>(block, "screenshotUrl"));
+  const screenshotUrl = resolveAssetSrc(readBlockValue<string>(block, "screenshotUrl"), readBlockValue<string>(block, "screenshotAssetId"));
   const title = readBlockValue<string>(block, "title");
   const caption = readBlockValue<string>(block, "caption");
   const sandbox = readBlockValue<string>(block, "sandbox") === "relaxed" ? "allow-scripts" : "";
@@ -1168,6 +1168,14 @@ function absoluteImageURL(raw: string | undefined) {
   } catch {
     return "";
   }
+}
+
+function resolveAssetSrc(rawUrl: string | undefined, assetId: string | undefined) {
+  const absolute = absoluteImageURL(rawUrl);
+  if (absolute) return absolute;
+  const id = (assetId || "").trim();
+  if (!id) return "";
+  return `/api/hub/assets/${encodeURIComponent(id)}`;
 }
 
 function requireOK(response: Response) {
